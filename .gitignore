@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# 运行时生成
+.env_ready
+logs/
+cookies/
+
+# 浏览器 Profile
+/browser_profile/
+
+# 用户数据（图片、配置中可能含敏感信息）
+*.png
+*.jpg
+*.jpeg
+
+# IDE
+.vscode/
+.idea/
