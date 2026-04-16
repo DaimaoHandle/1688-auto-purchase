@@ -325,29 +325,38 @@ def _send_message_to_service(context, detail_page):
         except Exception:
             pass
 
-        # 捕获新标签页（客服聊天窗口）
+        # 捕获客服标签页：取除 detail_page 外最新打开的标签
         chat_page = None
         try:
-            # 检查是否已有新标签打开
-            pages = context.pages
-            for p in pages:
-                if p != detail_page and ('im.' in p.url or 'ww.' in p.url or 'amos' in p.url or 'chat' in p.url):
-                    chat_page = p
+            # 等待新标签出现（最多 8 秒）
+            for _pw in range(4):
+                pages = context.pages
+                # 找不是 detail_page 的最新标签
+                candidates = [p for p in pages if p != detail_page]
+                if candidates:
+                    chat_page = candidates[-1]  # 最后一个（最新打开的）
                     break
+                detail_page.wait_for_timeout(2000)
 
             if not chat_page:
-                # 再等一下看有没有新标签
-                with context.expect_page(timeout=5000) as chat_page_info:
-                    pass  # 如果上面选择网页版后会打开新标签
-                chat_page = chat_page_info.value
+                logger.warning("未检测到新标签页，跳过发消息")
+                return
 
-            if chat_page:
-                chat_page.wait_for_load_state("domcontentloaded")
-                chat_page.wait_for_timeout(3000)
-                logger.info(f"客服页面已打开: {chat_page.url}")
-        except Exception:
+            # 等待页面加载并稳定（客服页面可能有中间跳转）
+            chat_page.wait_for_load_state("domcontentloaded")
+            chat_page.wait_for_timeout(5000)
+            logger.info(f"客服页面已打开: {chat_page.url}")
+
+            # 如果页面还在跳转（URL 是 1688 首页等），再等一会
+            for _rw in range(5):
+                url = chat_page.url
+                if 'im.' in url or 'ww.' in url or 'amos' in url or 'air.' in url or 'chat' in url:
+                    break
+                chat_page.wait_for_timeout(2000)
+            logger.info(f"客服页面最终URL: {chat_page.url}")
+        except Exception as e:
+            logger.warning(f"捕获客服标签失败: {e}")
             if not chat_page:
-                logger.warning("客服未在新标签打开，跳过发消息")
                 return
 
         # 客服聊天在 iframe 内（可能多层嵌套），遍历所有 frame 查找输入框
