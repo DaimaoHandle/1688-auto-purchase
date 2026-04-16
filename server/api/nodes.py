@@ -50,7 +50,7 @@ async def list_nodes():
 async def create_node(req: CreateNodeRequest):
     """生成新节点的 ID 和 Token。"""
     node_id = str(uuid.uuid4())[:8]
-    token = secrets.token_urlsafe(32)
+    token = secrets.token_hex(32)
     name = req.name or f"node-{node_id[:4]}"
 
     db = await get_db()

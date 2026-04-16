@@ -118,6 +118,21 @@ class PurchaseWorker:
         try:
             self._send_status(STATUS_STARTING, "正在启动浏览器...")
 
+            # 如果下发的 config 为空，用本地 config.json 兜底
+            if not config or not config.get("search"):
+                local_config_path = os.path.join(
+                    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "config.json"
+                )
+                if os.path.isfile(local_config_path):
+                    import json as _json
+                    with open(local_config_path, "r", encoding="utf-8") as _f:
+                        local_config = _json.load(_f)
+                    # 合并：下发的 config 优先，缺失项用本地补齐
+                    for key, val in local_config.items():
+                        if key not in config or not config[key]:
+                            config[key] = val
+                    logger.info("使用本地 config.json 补齐配置")
+
             # 准备搜索图片
             if image_data:
                 suffix = os.path.splitext(image_filename)[1] or ".png"
