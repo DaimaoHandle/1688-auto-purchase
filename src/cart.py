@@ -1217,6 +1217,136 @@ def _select_group_by_mouse(cart_page, group_indices: list):
     return clicked
 
 
+def _read_item_prices(cart_page) -> list:
+    """读取采购车中所有商品的索引和小计价格。"""
+    return cart_page.evaluate("""() => {
+        var tbodies = document.querySelectorAll('tbody');
+        var results = [];
+        var itemIdx = 0;
+        for (var i = 0; i < tbodies.length; i++) {
+            var tb = tbodies[i];
+            var r = tb.getBoundingClientRect();
+            if (r.width < 400 || r.height < 50) continue;
+            var txt = (tb.innerText || '').trim();
+            if (txt.length < 10) continue;
+            var nums = txt.match(/\\d+\\.\\d{2}/g);
+            if (!nums || nums.length === 0) continue;
+            var price = parseFloat(nums[nums.length - 1]);
+            results.push({index: itemIdx, price: price});
+            itemIdx++;
+        }
+        return results;
+    }""") or []
+
+
+def _adjust_group_to_fit(cart_page, group_indices: list, all_items: list, order_limit: float) -> float:
+    """
+    当勾选后实际金额超过 order_limit 时，智能替换商品使金额不超限且尽量接近限额。
+
+    算法：
+    1. 计算超出金额 excess = real_amount - order_limit
+    2. 在已勾选商品中，找价格 ≥ excess 且最小的商品取消（浪费最少的替换）
+    3. 取消后看剩余空间 gap，从未参与本组的剩余商品中，找价格 ≤ gap 且最大的补进来
+    4. 验证收银台金额，仍超限则重复，被踢出过的商品不再参与本组
+    5. 最多调整 10 轮，避免意外循环
+
+    返回调整后的实际金额，失败返回 -1。
+    """
+    # 当前已勾选的商品索引集合
+    selected = set(group_indices)
+    # 本组中被踢出过的商品（不再参与本组计算）
+    excluded = set()
+    # 所有商品索引集合
+    all_indices = set(it['index'] for it in all_items)
+    # 价格查找表
+    price_map = {it['index']: it['price'] for it in all_items}
+
+    for round_num in range(10):
+        real_amount = _read_bottom_bar_amount(cart_page)
+        if real_amount <= 0:
+            logger.warning("无法读取收银台金额")
+            return -1.0
+
+        if real_amount <= order_limit:
+            logger.info(f"  调整完成（第{round_num}轮）: ¥{real_amount:.2f} ≤ ¥{order_limit}")
+            return real_amount
+
+        excess = real_amount - order_limit
+        logger.info(f"  第{round_num+1}轮调整: 实际 ¥{real_amount:.2f}，超出 ¥{excess:.2f}")
+
+        # 在已勾选中，找价格 ≥ excess 且最小的（取消它刚好降到限额内，浪费最少）
+        candidates_to_remove = [
+            idx for idx in selected
+            if price_map.get(idx, 0) >= excess
+        ]
+        if candidates_to_remove:
+            # 选价格最小的（取消后浪费最少）
+            to_remove = min(candidates_to_remove, key=lambda idx: price_map.get(idx, 0))
+        else:
+            # 没有单个商品能覆盖超出金额，取消最贵的
+            to_remove = max(selected, key=lambda idx: price_map.get(idx, 0))
+
+        # 取消勾选
+        logger.info(f"  取消商品[{to_remove}] (¥{price_map.get(to_remove, 0):.2f})")
+        coord = _get_one_checkbox_coord(cart_page, to_remove)
+        if coord:
+            cart_page.mouse.click(coord['x'], coord['y'])
+            cart_page.wait_for_timeout(2000)
+        selected.discard(to_remove)
+        excluded.add(to_remove)
+
+        # 读取取消后的金额
+        after_remove = _read_bottom_bar_amount(cart_page)
+        if after_remove <= 0:
+            continue
+        logger.info(f"  取消后: ¥{after_remove:.2f}")
+
+        if after_remove > order_limit:
+            # 还是超限，继续下一轮
+            continue
+
+        # 有剩余空间，尝试补入一个商品
+        gap = order_limit - after_remove
+        # 候选：不在已勾选中、不在本组已排除中的商品，且价格 ≤ gap
+        candidates_to_add = [
+            idx for idx in all_indices
+            if idx not in selected and idx not in excluded
+            and price_map.get(idx, 0) <= gap and price_map.get(idx, 0) > 0
+        ]
+
+        if candidates_to_add:
+            # 选价格最大的（最接近填满空间）
+            to_add = max(candidates_to_add, key=lambda idx: price_map.get(idx, 0))
+            logger.info(f"  补入商品[{to_add}] (¥{price_map.get(to_add, 0):.2f})，剩余空间 ¥{gap:.2f}")
+            coord_add = _get_one_checkbox_coord(cart_page, to_add)
+            if coord_add and not coord_add.get('checked', False):
+                cart_page.mouse.click(coord_add['x'], coord_add['y'])
+                cart_page.wait_for_timeout(2000)
+                selected.add(to_add)
+
+                # 验证补入后是否仍在限额内
+                after_add = _read_bottom_bar_amount(cart_page)
+                logger.info(f"  补入后: ¥{after_add:.2f}")
+                if after_add > order_limit:
+                    # 补入后又超了（运费变化），取消刚补入的
+                    logger.info(f"  补入后超限，取消商品[{to_add}]")
+                    coord_add2 = _get_one_checkbox_coord(cart_page, to_add)
+                    if coord_add2:
+                        cart_page.mouse.click(coord_add2['x'], coord_add2['y'])
+                        cart_page.wait_for_timeout(2000)
+                    selected.discard(to_add)
+                    excluded.add(to_add)
+        else:
+            logger.info(f"  无合适商品可补入（空间 ¥{gap:.2f}）")
+
+    # 最终检查
+    final = _read_bottom_bar_amount(cart_page)
+    if final > 0 and final <= order_limit:
+        return final
+    logger.warning(f"调整 10 轮后金额 ¥{final:.2f}，仍不满足限额")
+    return final if final > 0 and final <= order_limit else -1.0
+
+
 def run_cart_checkout(context, order_limit: float = 500.0, shipping_reserve: float = 15.0):
     """
     采购车结算：预读价格 → 贪心分组 → 每组鼠标勾选 → 结算 → 提交订单。
@@ -1308,11 +1438,19 @@ def run_cart_checkout(context, order_limit: float = 500.0, shipping_reserve: flo
         _select_group_by_mouse(cart_page, group_indices)
         random_delay(0.5, 1.0)
 
-        # 读取收银台实际金额确认
+        # 读取收银台实际金额，如果超限则调整
         real_amount = _read_bottom_bar_amount(cart_page)
         if real_amount > 0:
             logger.info(f"收银台实际金额: ¥{real_amount:.2f} (预计: ¥{gtotal:.2f})")
             print(f"    收银台金额: ¥{real_amount:.2f}")
+
+            if real_amount > order_limit:
+                logger.info(f"实际金额 ¥{real_amount:.2f} 超过限额 ¥{order_limit}，开始调整...")
+                real_amount = _adjust_group_to_fit(cart_page, group_indices, items, order_limit)
+                if real_amount <= 0:
+                    logger.warning("调整后仍无法满足限额，跳过此组")
+                    continue
+                print(f"    调整后金额: ¥{real_amount:.2f}")
         else:
             logger.warning("无法读取收银台金额，继续结算")
 
