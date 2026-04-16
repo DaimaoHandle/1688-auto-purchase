@@ -60,7 +60,13 @@ async def agent_ws_endpoint(websocket: WebSocket):
 
         # 注册成功
         node_name = node_info["name"]
-        node_manager.set_online(node_id, websocket, node_name)
+        # 获取 Agent 的 IP
+        remote_ip = ""
+        try:
+            remote_ip = websocket.client.host if websocket.client else ""
+        except Exception:
+            pass
+        node_manager.set_online(node_id, websocket, node_name, remote_ip=remote_ip)
 
         await websocket.send_text(make_message(MSG_REGISTER_ACK, {
             "ok": True, "node_name": node_name

@@ -65,6 +65,7 @@ async def list_nodes():
                 "buyer_phone": row["buyer_phone"] or "",
                 "ship_address": row["ship_address"] or "",
                 "online": state.online if state else False,
+                "remote_ip": state.remote_ip if state else "",
                 "task_status": state.task_status if state else None,
                 "task_progress": state.task_progress if state else None,
                 "last_heartbeat": state.last_heartbeat.isoformat() if state and state.last_heartbeat else None,

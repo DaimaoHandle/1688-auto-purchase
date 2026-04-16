@@ -17,6 +17,7 @@ class NodeState:
         self.name = name
         self.online = False
         self.ws: Optional[WebSocket] = None
+        self.remote_ip: str = ""
         self.last_heartbeat: Optional[datetime] = None
         self.current_task_id: Optional[str] = None
         self.task_status: Optional[str] = None
@@ -53,14 +54,15 @@ class NodeManager:
     def get_all(self) -> list[NodeState]:
         return list(self._nodes.values())
 
-    def set_online(self, node_id: str, ws: WebSocket, name: str = ""):
+    def set_online(self, node_id: str, ws: WebSocket, name: str = "", remote_ip: str = ""):
         node = self.get_or_create(node_id, name)
         node.online = True
         node.ws = ws
+        node.remote_ip = remote_ip
         node.last_heartbeat = datetime.now()
         if name:
             node.name = name
-        logger.info(f"节点上线: {node_id} ({name})")
+        logger.info(f"节点上线: {node_id} ({name}) IP={remote_ip}")
 
     def set_offline(self, node_id: str):
         node = self.get(node_id)
