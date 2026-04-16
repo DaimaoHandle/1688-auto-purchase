@@ -370,28 +370,25 @@ def _send_message_to_service(context, detail_page):
                 logger.info(f"找到客服 iframe: {chat_frame.url[:60]}")
 
                 # 在 iframe 内等待输入框出现，最多 15 秒
+                # 输入框是 <pre class="edit" contenteditable="true">
                 sent = False
                 for _wait2 in range(8):
                     found = chat_frame.evaluate("""() => {
-                        var inputs = document.querySelectorAll(
-                            'textarea, [contenteditable="true"], [role="textbox"], input[type="text"]'
-                        );
-                        for (var i = 0; i < inputs.length; i++) {
-                            var el = inputs[i];
-                            var r = el.getBoundingClientRect();
-                            if (r.width > 50 && r.height > 15) {
-                                el.focus();
-                                if (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT') {
-                                    el.value = '今天能发货吗';
-                                    el.dispatchEvent(new Event('input', {bubbles: true}));
-                                } else {
-                                    el.innerText = '今天能发货吗';
-                                    el.dispatchEvent(new Event('input', {bubbles: true}));
-                                }
-                                return true;
+                        // 精确匹配：pre.edit[contenteditable]
+                        var el = document.querySelector('pre.edit[contenteditable="true"]');
+                        if (!el) {
+                            // 兜底：任何 contenteditable 元素
+                            var all = document.querySelectorAll('[contenteditable="true"]');
+                            for (var i = 0; i < all.length; i++) {
+                                var r = all[i].getBoundingClientRect();
+                                if (r.width > 50 && r.height > 15) { el = all[i]; break; }
                             }
                         }
-                        return false;
+                        if (!el) return false;
+                        el.focus();
+                        el.innerText = '今天能发货吗';
+                        el.dispatchEvent(new Event('input', {bubbles: true}));
+                        return true;
                     }""")
                     if found:
                         sent = True
@@ -400,12 +397,12 @@ def _send_message_to_service(context, detail_page):
 
                 if sent:
                     chat_frame.wait_for_timeout(500)
-                    # 在 iframe 内找发送按钮
+                    # 在 iframe 内找发送按钮（文字包含"发送"）
                     send_ok = chat_frame.evaluate("""() => {
                         var all = document.querySelectorAll('button, a, div, span');
                         for (var i = 0; i < all.length; i++) {
                             var txt = String(all[i].innerText || '').trim();
-                            if (txt === '发送' || txt === 'Send') {
+                            if (txt.indexOf('发送') !== -1 && txt.length < 10) {
                                 var r = all[i].getBoundingClientRect();
                                 if (r.width > 10 && r.height > 10) {
                                     all[i].click();
@@ -416,13 +413,11 @@ def _send_message_to_service(context, detail_page):
                         return false;
                     }""")
                     if not send_ok:
-                        # 尝试 Enter 发送
-                        chat_frame.evaluate("""() => {
-                            var el = document.activeElement;
-                            if (el) {
-                                el.dispatchEvent(new KeyboardEvent('keydown', {key:'Enter',keyCode:13,bubbles:true}));
-                            }
-                        }""")
+                        # 尝试在输入框内按 Enter
+                        try:
+                            chat_frame.press('pre.edit[contenteditable="true"]', 'Enter')
+                        except Exception:
+                            pass
                     chat_page.wait_for_timeout(1000)
                     logger.info("已发送消息: 今天能发货吗")
                 else:
