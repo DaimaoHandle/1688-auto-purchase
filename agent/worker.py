@@ -60,6 +60,7 @@ class PurchaseWorker:
         self._approve_event.clear()
         self._approved = False
         self._running = True
+        self._context = None  # Playwright browser context，由 Worker 线程设置
 
         self._thread = threading.Thread(
             target=self._run,
@@ -69,8 +70,17 @@ class PurchaseWorker:
         self._thread.start()
 
     def stop_task(self):
-        """请求取消当前任务。"""
+        """立即取消当前任务：关闭浏览器强制中断 Playwright 操作。"""
         self._cancel_event.set()
+        # 唤醒可能在等待结算审批的阻塞
+        self._approve_event.set()
+        # 直接关闭浏览器，Playwright 正在执行的操作会立即抛异常
+        if self._context:
+            try:
+                self._context.close()
+                logger.info("已强制关闭浏览器")
+            except Exception:
+                pass
 
     def approve_checkout(self):
         """批准结算。"""
@@ -154,6 +164,7 @@ class PurchaseWorker:
 
             # 初始化浏览器
             playwright_obj, browser, context, page = init_browser(config)
+            self._context = context  # 保存引用，stop_task 时可直接关闭
 
             if self._is_cancelled():
                 self._send_status(STATUS_CANCELLED)
@@ -257,7 +268,8 @@ class PurchaseWorker:
                 except Exception:
                     pass
 
-            # 关闭浏览器
+            # 关闭浏览器（可能已被 stop_task 关闭）
+            self._context = None
             if context:
                 try:
                     context.close()
