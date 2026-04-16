@@ -94,28 +94,28 @@ html, body, #app { height: 100%; margin: 0; }
             <template v-if="currentPage === 'dashboard'">
                 <!-- 顶部统计卡片 -->
                 <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-bottom:20px">
-                    <el-card shadow="hover" body-style="padding:16px;text-align:center">
+                    <el-card shadow="hover" :body-style="{padding:'16px',textAlign:'center'}">
                         <div style="font-size:26px;font-weight:700;color:#409eff">{{ nodeList.length }}</div>
                         <div style="font-size:12px;color:#999;margin-top:4px">节点总数</div>
                     </el-card>
-                    <el-card shadow="hover" body-style="padding:16px;text-align:center">
+                    <el-card shadow="hover" :body-style="{padding:'16px',textAlign:'center'}">
                         <div style="font-size:26px;font-weight:700;color:#67c23a">{{ onlineCount }}</div>
                         <div style="font-size:12px;color:#999;margin-top:4px">在线节点</div>
                     </el-card>
-                    <el-card shadow="hover" body-style="padding:16px;text-align:center">
+                    <el-card shadow="hover" :body-style="{padding:'16px',textAlign:'center'}">
                         <div style="font-size:26px;font-weight:700;color:#e6a23c">{{ activeCount }}</div>
                         <div style="font-size:12px;color:#999;margin-top:4px">运行中</div>
                     </el-card>
-                    <el-card shadow="hover" body-style="padding:16px;text-align:center">
+                    <el-card shadow="hover" :body-style="{padding:'16px',textAlign:'center'}">
                         <div style="font-size:26px;font-weight:700;color:#67c23a">{{ todayStats.today_success }}</div>
                         <div style="font-size:12px;color:#999;margin-top:4px">今日成功</div>
                     </el-card>
-                    <el-card shadow="hover" body-style="padding:16px;text-align:center">
+                    <el-card shadow="hover" :body-style="{padding:'16px',textAlign:'center'}">
                         <div style="font-size:26px;font-weight:700;color:#f56c6c">{{ todayStats.today_failed }}</div>
                         <div style="font-size:12px;color:#999;margin-top:4px">今日失败</div>
                     </el-card>
-                    <el-card shadow="hover" body-style="padding:16px;text-align:center">
-                        <div style="font-size:22px;font-weight:700;color:#f56c6c">&yen;{{ (todayStats.today_amount || 0).toFixed(2) }}</div>
+                    <el-card shadow="hover" :body-style="{padding:'16px',textAlign:'center'}">
+                        <div style="font-size:22px;font-weight:700;color:#f56c6c">¥{{ (todayStats.today_amount || 0).toFixed(2) }}</div>
                         <div style="font-size:12px;color:#999;margin-top:4px">今日采购额</div>
                     </el-card>
                 </div>
@@ -152,7 +152,7 @@ html, body, #app { height: 100%; margin: 0; }
                             <div class="progress-section" v-if="n.task_progress && n.task_status === 'filling_cart'">
                                 <div class="progress-label">
                                     <span>已加购 {{ n.task_progress.items_added || 0 }} 件</span>
-                                    <span>&yen;{{ (n.task_progress.local_amount || 0).toFixed(2) }} / &yen;{{ n.task_progress.target_amount || 0 }}</span>
+                                    <span>¥{{ (n.task_progress.local_amount || 0).toFixed(2) }} / ¥{{ n.task_progress.target_amount || 0 }}</span>
                                 </div>
                                 <el-progress :percentage="progressPct(n)" :show-text="false" :stroke-width="8" />
                             </div>
@@ -250,7 +250,7 @@ html, body, #app { height: 100%; margin: 0; }
                     </el-card>
                     <el-card style="flex:1" shadow="hover">
                         <div style="text-align:center">
-                            <div style="font-size:28px;font-weight:700;color:#f56c6c">&yen;{{ (reportSummary.total_amount || 0).toFixed(2) }}</div>
+                            <div style="font-size:28px;font-weight:700;color:#f56c6c">¥{{ (reportSummary.total_amount || 0).toFixed(2) }}</div>
                             <div style="font-size:13px;color:#999;margin-top:4px">总采购金额</div>
                         </div>
                     </el-card>
@@ -265,7 +265,7 @@ html, body, #app { height: 100%; margin: 0; }
                         <el-table-column prop="items" label="加购商品" width="90" />
                         <el-table-column prop="orders" label="订单数" width="80" />
                         <el-table-column label="采购金额" width="120" align="right">
-                            <template #default="{row}"><span>&yen;{{ (row.amount || 0).toFixed(2) }}</span></template>
+                            <template #default="{row}"><span>¥{{ (row.amount || 0).toFixed(2) }}</span></template>
                         </el-table-column>
                     </el-table>
                 </el-card>
