@@ -393,30 +393,41 @@ async function loadNodes() {
     } catch(e) {}
 }
 
-// 粘贴图片支持
-document.addEventListener('paste', function(e) {
-    // 只在配置弹窗打开时响应粘贴
-    if (!document.getElementById('configModal').classList.contains('show')) return;
-    const items = e.clipboardData && e.clipboardData.items;
+// 粘贴图片支持（全局监听，配置弹窗打开时生效）
+window.addEventListener('paste', function(e) {
+    var modal = document.getElementById('configModal');
+    if (!modal || !modal.classList.contains('show')) return;
+    var items = (e.clipboardData || e.originalEvent && e.originalEvent.clipboardData || {}).items;
     if (!items) return;
-    for (let i = 0; i < items.length; i++) {
+    for (var i = 0; i < items.length; i++) {
         if (items[i].type.indexOf('image') !== -1) {
-            const file = items[i].getAsFile();
-            if (file) {
-                uploadFile(file);
-                e.preventDefault();
-                return;
-            }
+            var file = items[i].getAsFile();
+            if (file) { uploadFile(file); e.preventDefault(); return; }
         }
     }
-});
+}, true);
 
 // 拖拽上传支持
-document.getElementById('uploadArea')?.addEventListener('dragover', function(e) { e.preventDefault(); this.style.borderColor = '#3b82f6'; });
-document.getElementById('uploadArea')?.addEventListener('dragleave', function(e) { this.style.borderColor = '#ddd'; });
-document.getElementById('uploadArea')?.addEventListener('drop', function(e) {
-    e.preventDefault(); this.style.borderColor = '#ddd';
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) uploadFile(e.dataTransfer.files[0]);
+window.addEventListener('load', function() {
+    var area = document.getElementById('uploadArea');
+    if (!area) return;
+    area.addEventListener('dragover', function(e) { e.preventDefault(); e.stopPropagation(); this.style.borderColor = '#3b82f6'; });
+    area.addEventListener('dragleave', function(e) { e.preventDefault(); this.style.borderColor = '#ddd'; });
+    area.addEventListener('drop', function(e) {
+        e.preventDefault(); e.stopPropagation(); this.style.borderColor = '#ddd';
+        if (e.dataTransfer.files && e.dataTransfer.files[0]) uploadFile(e.dataTransfer.files[0]);
+    });
+    // 上传区域也监听粘贴
+    area.addEventListener('paste', function(e) {
+        var items = (e.clipboardData || {}).items;
+        if (!items) return;
+        for (var i = 0; i < items.length; i++) {
+            if (items[i].type.indexOf('image') !== -1) {
+                var file = items[i].getAsFile();
+                if (file) { uploadFile(file); e.preventDefault(); return; }
+            }
+        }
+    });
 });
 
 loadNodes();
