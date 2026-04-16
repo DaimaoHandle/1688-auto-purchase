@@ -755,15 +755,30 @@ def _fill_cart_from_current_page(context, shop_page, cart_config, added_count, l
 
         logger.info(f"{prefix}第{page_num}页共 {len(items)} 个商品")
 
-        # 优先采购无销量商品：将无销量的排到前面
+        # 优先采购无销量商品：检查商品卡片（img的祖先容器）是否含"已售"
         def _has_sales(el):
             try:
-                txt = el.inner_text() or ""
-                return "已售" in txt
+                # img 元素自身没有文字，往上找父级卡片容器获取完整文字
+                result = shop_page.evaluate("""(img) => {
+                    var node = img;
+                    for (var i = 0; i < 6; i++) {
+                        node = node.parentElement;
+                        if (!node) return false;
+                        var txt = node.innerText || '';
+                        if (txt.indexOf('已售') !== -1) return true;
+                        // 找到足够大的容器就停（商品卡片通常 200px+ 宽）
+                        var r = node.getBoundingClientRect();
+                        if (r.width > 200 && r.height > 200) return txt.indexOf('已售') !== -1;
+                    }
+                    return false;
+                }""", el)
+                return bool(result)
             except Exception:
                 return False
 
         items_sorted = sorted(items, key=lambda el: (1 if _has_sales(el) else 0))
+        no_sales = sum(1 for el in items if not _has_sales(el))
+        logger.info(f"{prefix}本页无销量: {no_sales} 个，有销量: {len(items) - no_sales} 个")
 
         for item_el in items_sorted:
             if cancel_check and cancel_check():
