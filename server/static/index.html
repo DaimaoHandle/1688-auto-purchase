@@ -168,146 +168,90 @@ html, body, #app { height: 100%; margin: 0; }
                 </div>
 
                 <!-- 节点状态概览 -->
-                <el-card shadow="never">
-                    <template #header>
-                        <div style="display:flex;justify-content:space-between;align-items:center">
-                            <span style="font-size:14px;font-weight:600">节点状态</span>
-                            <el-button type="primary" size="small" @click="showAddNode = true">
-                                <el-icon><Plus /></el-icon> 添加节点
-                            </el-button>
-                        </div>
-                    </template>
-                    <el-empty v-if="nodeList.length === 0" description="暂无节点，请先添加" />
-                    <div class="node-grid" v-if="nodeList.length > 0">
-                        <el-card class="node-card" v-for="n in nodeList" :key="n.id" shadow="hover">
-                            <div class="card-header">
-                                <div class="name">
-                                    <el-badge is-dot :type="n.online ? 'success' : 'danger'" />
+                <div style="background:#fff;border-radius:8px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.08)">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+                        <span style="font-size:14px;font-weight:600">节点状态</span>
+                        <el-button type="primary" size="small" @click="showAddNode = true">添加节点</el-button>
+                    </div>
+                    <div v-if="nodeList.length === 0" style="text-align:center;padding:40px;color:#999">暂无节点，请先添加</div>
+                    <div v-if="nodeList.length > 0" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(380px,1fr));gap:14px">
+                        <div v-for="n in nodeList" :key="n.id" style="border:1px solid #ebeef5;border-radius:8px;padding:16px">
+                            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+                                <div style="font-size:15px;font-weight:600;display:flex;align-items:center;gap:8px">
+                                    <span :style="{width:'8px',height:'8px',borderRadius:'50%',background:n.online?'#67c23a':'#f56c6c',display:'inline-block'}"></span>
                                     {{ n.name || n.id }}
                                 </div>
                                 <el-tag :type="statusType(n)" size="small">{{ statusLabel(n) }}</el-tag>
                             </div>
-
-                            <!-- 节点信息 -->
-                            <div class="node-info" style="margin-top:8px">
-                                <div v-if="n.remark"><span class="label">备注：</span>{{ n.remark }}</div>
-                                <div v-if="n.account_1688"><span class="label">1688账号：</span>{{ n.account_1688 }}</div>
-                                <div v-if="n.last_heartbeat"><span class="label">最近心跳：</span>{{ formatTime(n.last_heartbeat) }}</div>
+                            <div style="font-size:13px;color:#666;line-height:1.8">
+                                <div v-if="n.remark"><span style="color:#999">备注：</span>{{ n.remark }}</div>
+                                <div v-if="n.account_1688"><span style="color:#999">1688账号：</span>{{ n.account_1688 }}</div>
+                                <div v-if="n.last_heartbeat"><span style="color:#999">最近心跳：</span>{{ formatTime(n.last_heartbeat) }}</div>
                             </div>
-
-                            <!-- 进度 -->
-                            <div class="progress-section" v-if="n.task_progress && n.task_status === 'filling_cart'">
-                                <div class="progress-label">
-                                    <span>已加购 {{ n.task_progress.items_added || 0 }} 件</span>
-                                    <span>¥{{ (n.task_progress.local_amount || 0).toFixed(2) }} / ¥{{ n.task_progress.target_amount || 0 }}</span>
+                            <div v-if="n.task_progress && n.task_status === 'filling_cart'" style="margin-top:8px">
+                                <div style="display:flex;justify-content:space-between;font-size:12px;color:#666;margin-bottom:4px">
+                                    <span>已加购 {{ n.task_progress.items_added||0 }} 件</span>
+                                    <span>¥{{ (n.task_progress.local_amount||0).toFixed(2) }} / ¥{{ n.task_progress.target_amount||0 }}</span>
                                 </div>
-                                <el-progress :percentage="progressPct(n)" :show-text="false" :stroke-width="8" />
+                                <el-progress :percentage="progressPct(n)" :show-text="false" :stroke-width="6" />
                             </div>
-
-                            <!-- 操作按钮 -->
-                            <div style="margin-top: 12px; display: flex; gap: 6px; flex-wrap: wrap">
+                            <div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap">
                                 <el-button size="small" @click="openConfig(n)">配置</el-button>
-                                <template v-if="!n.online">
-                                    <el-tag type="info" size="small">离线</el-tag>
-                                </template>
-                                <template v-else-if="!n.task_status || ['idle','completed','failed','cancelled'].includes(n.task_status)">
-                                    <el-button type="success" size="small" @click="startTask(n.id)">启动</el-button>
-                                </template>
-                                <template v-else-if="n.task_status === 'awaiting_approval'">
-                                    <el-button type="success" size="small" @click="approveCheckout(n.task_id)">确认结算</el-button>
-                                    <el-button type="danger" size="small" @click="rejectCheckout(n.task_id)">取消结算</el-button>
-                                </template>
-                                <template v-else>
-                                    <el-button type="danger" size="small" @click="stopTask(n.id)">停止</el-button>
-                                </template>
-                                <el-button size="small" :type="showLogs[n.id] ? 'primary' : ''" @click="toggleLog(n.id)" plain>日志</el-button>
+                                <el-tag v-if="!n.online" type="info" size="small">离线</el-tag>
+                                <el-button v-if="n.online && (!n.task_status || ['idle','completed','failed','cancelled'].includes(n.task_status))" type="success" size="small" @click="startTask(n.id)">启动</el-button>
+                                <el-button v-if="n.online && n.task_status === 'awaiting_approval'" type="success" size="small" @click="approveCheckout(n.task_id)">确认结算</el-button>
+                                <el-button v-if="n.online && n.task_status === 'awaiting_approval'" type="danger" size="small" @click="rejectCheckout(n.task_id)">取消结算</el-button>
+                                <el-button v-if="n.online && n.task_status && !['idle','completed','failed','cancelled','awaiting_approval'].includes(n.task_status)" type="danger" size="small" @click="stopTask(n.id)">停止</el-button>
+                                <el-button size="small" :type="showLogs[n.id]?'primary':''" @click="toggleLog(n.id)" plain>日志</el-button>
                             </div>
-
-                            <!-- 日志面板 -->
-                            <div class="log-box" v-if="showLogs[n.id]" :ref="el => logRefs[n.id] = el">
-                                <div class="log-line" :class="l.level" v-for="(l, i) in (nodeLogs[n.id] || []).slice(-100)" :key="i">
-                                    {{ l.message }}
-                                </div>
+                            <div class="log-box" v-if="showLogs[n.id]" :ref="el=>logRefs[n.id]=el">
+                                <div class="log-line" :class="l.level" v-for="(l,i) in (nodeLogs[n.id]||[]).slice(-100)" :key="i">{{ l.message }}</div>
                             </div>
-                        </el-card>
+                        </div>
                     </div>
-                </el-card>
+                </div>
             </template>
 
             <!-- 节点管理页面 -->
             <template v-if="currentPage === 'nodes'">
                 <div style="margin-bottom:16px;text-align:right">
-                    <el-button type="primary" size="small" @click="showAddNode = true">
-                        <el-icon><Plus /></el-icon> 添加节点
-                    </el-button>
+                    <el-button type="primary" size="small" @click="showAddNode = true">添加节点</el-button>
                 </div>
-                <el-empty v-if="nodeList.length === 0" description="暂无节点" />
-                <div class="node-grid" v-if="nodeList.length > 0">
-                    <el-card v-for="n in nodeList" :key="n.id" shadow="hover" style="border-radius:10px">
-                        <!-- 顶部：名称 + 节点状态 -->
+                <div v-if="nodeList.length === 0" style="text-align:center;padding:60px;color:#999">暂无节点</div>
+                <div v-if="nodeList.length > 0" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(400px,1fr));gap:16px">
+                    <div v-for="n in nodeList" :key="n.id" style="background:#fff;border-radius:10px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1)">
                         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
                             <div style="font-size:16px;font-weight:600;display:flex;align-items:center;gap:8px">
                                 <span :style="{width:'8px',height:'8px',borderRadius:'50%',background:n.online?'#67c23a':'#f56c6c',display:'inline-block'}"></span>
                                 {{ n.name || n.id }}
                             </div>
-                            <el-tag :type="n.online ? 'success' : 'info'" size="small" effect="dark">
-                                {{ n.online ? '在线' : '离线' }}
-                            </el-tag>
+                            <el-tag :type="n.online ? 'success' : 'info'" size="small" effect="dark">{{ n.online ? '在线' : '离线' }}</el-tag>
                         </div>
-
-                        <!-- 信息区 -->
                         <div style="font-size:13px;color:#606266;line-height:2.2;background:#fafafa;border-radius:6px;padding:10px 14px">
-                            <div v-if="n.remark" style="display:flex"><span style="color:#909399;min-width:80px">备注</span>{{ n.remark }}</div>
-                            <div style="display:flex"><span style="color:#909399;min-width:80px">服务器IP</span>{{ n.remote_ip || '-' }}</div>
-                            <div style="display:flex"><span style="color:#909399;min-width:80px">节点状态</span>
-                                <el-tag :type="n.online ? 'success' : 'info'" size="small">{{ n.online ? '已连接' : '未连接' }}</el-tag>
-                            </div>
-                            <div style="display:flex;align-items:center"><span style="color:#909399;min-width:80px">任务状态</span>
-                                <el-tag v-if="n.task_status && !['idle','completed','failed','cancelled'].includes(n.task_status)" :type="statusType(n)" size="small">{{ statusLabel(n) }}</el-tag>
-                                <span v-else style="color:#c0c4cc">空闲</span>
-                            </div>
+                            <div v-if="n.remark"><span style="color:#909399;min-width:80px;display:inline-block">备注</span>{{ n.remark }}</div>
+                            <div><span style="color:#909399;min-width:80px;display:inline-block">服务器IP</span>{{ n.remote_ip || '-' }}</div>
+                            <div><span style="color:#909399;min-width:80px;display:inline-block">节点状态</span>{{ n.online ? '已连接' : '未连接' }}</div>
+                            <div><span style="color:#909399;min-width:80px;display:inline-block">任务状态</span>{{ n.task_status ? statusLabel(n) : '空闲' }}</div>
                         </div>
-
-                        <!-- 进度条（加购中时显示） -->
                         <div v-if="n.task_progress && n.task_status === 'filling_cart'" style="margin-top:10px">
                             <div style="display:flex;justify-content:space-between;font-size:12px;color:#666;margin-bottom:4px">
                                 <span>已加购 {{ n.task_progress.items_added || 0 }} 件</span>
-                                <span>¥{{ (n.task_progress.local_amount || 0).toFixed(2) }} / ¥{{ n.task_progress.target_amount || 0 }}</span>
+                                <span>¥{{ (n.task_progress.local_amount||0).toFixed(2) }} / ¥{{ n.task_progress.target_amount||0 }}</span>
                             </div>
                             <el-progress :percentage="progressPct(n)" :show-text="false" :stroke-width="6" />
                         </div>
-
-                        <!-- 操作按钮 -->
                         <div style="margin-top:14px;display:flex;gap:6px;border-top:1px solid #eee;padding-top:12px;flex-wrap:wrap">
-                            <el-button size="small" @click="editNodeInfo(n)">
-                                详情
-                            </el-button>
-                            <el-button size="small" @click="openConfig(n)">
-                                <el-icon><Setting /></el-icon> 采购配置
-                            </el-button>
-                            <template v-if="n.online">
-                                <el-button v-if="!n.task_status || ['idle','completed','failed','cancelled'].includes(n.task_status)" type="success" size="small" @click="startTask(n.id)">
-                                    启动
-                                </el-button>
-                                <el-button v-else-if="n.task_status === 'awaiting_approval'" type="warning" size="small" @click="approveCheckout(n.task_id)">
-                                    确认结算
-                                </el-button>
-                                <el-button v-else type="danger" size="small" @click="stopTask(n.id)">
-                                    停止
-                                </el-button>
-                            </template>
-                            <el-button size="small" :type="showLogs[n.id] ? 'primary' : ''" @click="toggleLog(n.id)" plain>
-                                日志
-                            </el-button>
+                            <el-button size="small" @click="editNodeInfo(n)">详情</el-button>
+                            <el-button size="small" @click="openConfig(n)">采购配置</el-button>
+                            <el-button v-if="n.online && (!n.task_status || ['idle','completed','failed','cancelled'].includes(n.task_status))" type="success" size="small" @click="startTask(n.id)">启动</el-button>
+                            <el-button v-if="n.online && n.task_status === 'awaiting_approval'" type="warning" size="small" @click="approveCheckout(n.task_id)">确认结算</el-button>
+                            <el-button v-if="n.online && n.task_status && !['idle','completed','failed','cancelled','awaiting_approval'].includes(n.task_status)" type="danger" size="small" @click="stopTask(n.id)">停止</el-button>
+                            <el-button size="small" :type="showLogs[n.id] ? 'primary' : ''" @click="toggleLog(n.id)" plain>日志</el-button>
                         </div>
-
-                        <!-- 日志面板 -->
                         <div class="log-box" v-if="showLogs[n.id]" :ref="el => logRefs[n.id] = el">
-                            <div class="log-line" :class="l.level" v-for="(l, i) in (nodeLogs[n.id] || []).slice(-100)" :key="i">
-                                {{ l.message }}
-                            </div>
+                            <div class="log-line" :class="l.level" v-for="(l,i) in (nodeLogs[n.id]||[]).slice(-100)" :key="i">{{ l.message }}</div>
                         </div>
-                    </el-card>
+                    </div>
                 </div>
             </template>
 
