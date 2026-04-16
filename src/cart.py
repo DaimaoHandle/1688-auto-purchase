@@ -755,19 +755,25 @@ def _fill_cart_from_current_page(context, shop_page, cart_config, added_count, l
 
         logger.info(f"{prefix}第{page_num}页共 {len(items)} 个商品")
 
-        # 优先采购无销量商品：逐个检查每个 img 的父级卡片是否含"已售"
+        # 优先采购无销量商品：检查卡片内是否有 [title="累计销量"] 或含"已售"的元素
         sales_flags = []
         for item_el in items:
             try:
                 has = shop_page.evaluate("""(img) => {
+                    // 从 img 往上找卡片容器（最多10层），在容器内搜索销量标记
                     var node = img;
-                    for (var j = 0; j < 8; j++) {
+                    for (var j = 0; j < 10; j++) {
                         node = node.parentElement;
                         if (!node) return false;
-                        var txt = node.innerText || '';
-                        if (txt.indexOf('已售') !== -1) return true;
-                        var r = node.getBoundingClientRect();
-                        if (r.width > 180 && r.height > 180) return txt.indexOf('已售') !== -1;
+                        // 检查容器内是否有 title="累计销量" 的元素
+                        var salesEl = node.querySelector('[title="累计销量"]');
+                        if (salesEl) return true;
+                        // 也检查文本包含"已售"
+                        var spans = node.querySelectorAll('span');
+                        for (var k = 0; k < spans.length; k++) {
+                            var t = (spans[k].innerText || '').trim();
+                            if (t.indexOf('已售') !== -1 && t.length < 20) return true;
+                        }
                     }
                     return false;
                 }""", item_el)
