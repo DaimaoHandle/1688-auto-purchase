@@ -763,7 +763,28 @@ def get_shop_items(shop_page):
         except Exception:
             continue
 
-    # 2. 扫描产品图片元素
+    # 2. 逐步滚动到底部触发所有懒加载图片渲染，再滚回顶部
+    try:
+        shop_page.evaluate("""() => {
+            return new Promise(resolve => {
+                var scrolled = 0;
+                var step = 500;
+                var timer = setInterval(() => {
+                    scrolled += step;
+                    window.scrollTo(0, scrolled);
+                    if (scrolled >= document.body.scrollHeight) {
+                        clearInterval(timer);
+                        window.scrollTo(0, 0);
+                        resolve();
+                    }
+                }, 150);
+            });
+        }""")
+        shop_page.wait_for_timeout(1000)
+    except Exception:
+        pass
+
+    # 3. 扫描产品图片元素
     img_els = shop_page.evaluate_handle("""() => {
         const results = [];
         const seen = new Set();
