@@ -80,9 +80,10 @@ body { font-family: -apple-system, "Microsoft YaHei", sans-serif; background: #f
 
     <div class="form-group">
         <label>搜索图片</label>
-        <div class="upload-area" id="uploadArea" onclick="document.getElementById('imageFile').click()">
-            点击上传搜索图片（或已有图片）
+        <div class="upload-area" id="uploadArea" onclick="document.getElementById('imageFile').click()" tabindex="0">
+            点击上传或 Ctrl+V 粘贴图片
         </div>
+        <img id="imagePreview" style="display:none;max-width:100%;max-height:150px;margin-top:8px;border-radius:4px">
         <input type="file" id="imageFile" accept="image/*" style="display:none" onchange="onImageSelected(this)">
         <select id="existingImage" style="margin-top:6px;width:100%;padding:6px;font-size:12px">
             <option value="">-- 或选择已上传的图片 --</option>
@@ -284,28 +285,36 @@ function closeConfigModal() {
     document.getElementById('configModal').classList.remove('show');
 }
 
-async function onImageSelected(input) {
+function onImageSelected(input) {
     if (!input.files || !input.files[0]) return;
-    const file = input.files[0];
+    uploadFile(input.files[0]);
+}
+
+async function uploadFile(file) {
     const area = document.getElementById('uploadArea');
+    const preview = document.getElementById('imagePreview');
     area.textContent = '上传中...';
 
     const formData = new FormData();
-    formData.append('file', file);
+    formData.append('file', file, file.name || 'paste.png');
     try {
         const res = await fetch('/api/images', { method: 'POST', body: formData });
         const data = await res.json();
         pendingImageId = data.id;
-        area.textContent = file.name + ' (' + Math.round(data.size/1024) + 'KB)';
+        area.textContent = (file.name || 'paste.png') + ' (' + Math.round(data.size/1024) + 'KB) \u2713';
         area.className = 'upload-area has-file';
         document.getElementById('existingImage').value = '';
+        // 显示预览
+        const reader = new FileReader();
+        reader.onload = function(e) { preview.src = e.target.result; preview.style.display = 'block'; };
+        reader.readAsDataURL(file);
         // 刷新图片列表
         const res2 = await fetch('/api/images');
         const imgs = await res2.json();
         const sel = document.getElementById('existingImage');
         sel.innerHTML = '<option value="">-- 或选择已上传的图片 --</option>';
         imgs.forEach(img => { sel.innerHTML += '<option value="' + img.id + '">' + img.filename + '</option>'; });
-    } catch(e) { area.textContent = '上传失败'; }
+    } catch(e) { area.textContent = '上传失败，点击重试'; }
 }
 
 async function saveConfig() {
@@ -383,6 +392,32 @@ async function loadNodes() {
         renderNodes();
     } catch(e) {}
 }
+
+// 粘贴图片支持
+document.addEventListener('paste', function(e) {
+    // 只在配置弹窗打开时响应粘贴
+    if (!document.getElementById('configModal').classList.contains('show')) return;
+    const items = e.clipboardData && e.clipboardData.items;
+    if (!items) return;
+    for (let i = 0; i < items.length; i++) {
+        if (items[i].type.indexOf('image') !== -1) {
+            const file = items[i].getAsFile();
+            if (file) {
+                uploadFile(file);
+                e.preventDefault();
+                return;
+            }
+        }
+    }
+});
+
+// 拖拽上传支持
+document.getElementById('uploadArea')?.addEventListener('dragover', function(e) { e.preventDefault(); this.style.borderColor = '#3b82f6'; });
+document.getElementById('uploadArea')?.addEventListener('dragleave', function(e) { this.style.borderColor = '#ddd'; });
+document.getElementById('uploadArea')?.addEventListener('drop', function(e) {
+    e.preventDefault(); this.style.borderColor = '#ddd';
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) uploadFile(e.dataTransfer.files[0]);
+});
 
 loadNodes();
 connectWS();
