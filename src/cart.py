@@ -1,6 +1,6 @@
 import logging
 from src.utils import parse_price, save_screenshot, random_delay
-from src.shop import get_shop_items, go_to_next_page
+from src.shop import get_shop_items, go_to_next_page, enter_new_product_zone, select_today_new_products, get_new_product_items
 from src.selector_health import try_selectors, get_tracker
 from src.retry import CircuitBreaker, is_page_alive, check_for_verification, wait_for_verification_clear, try_refresh_page
 
@@ -721,6 +721,100 @@ def add_item_to_cart(context, item_el, shop_page=None) -> float:
                     pass
 
 
+def _fill_cart_from_current_page(context, shop_page, cart_config, added_count, local_amount,
+                                  last_verified_amount, verify_interval,
+                                  progress_callback=None, cancel_check=None, label=""):
+    """
+    从当前页面的商品列表中加购，翻页直到达到目标或无更多商品。
+    返回 (added_count, local_amount)。
+    """
+    target = cart_config.get("target_amount", 10000)
+    strategy = cart_config.get("amount_strategy", "not_exceed")
+    max_items = cart_config.get("max_items", 200)
+    page_num = 1
+    prefix = f"[{label}] " if label else ""
+
+    breaker = CircuitBreaker(threshold=5)
+
+    while added_count < max_items:
+        if cancel_check and cancel_check():
+            logger.info(f"{prefix}收到取消指令，停止加购")
+            break
+
+        if breaker.should_abort():
+            logger.error(f"{prefix}[熔断] 连续失败 {breaker.consecutive_failures} 次，中止")
+            break
+
+        if breaker.level >= 1 and breaker.consecutive_failures % 5 == 0:
+            try_refresh_page(shop_page)
+
+        items, item_sel = get_shop_items(shop_page)
+        if not items:
+            logger.warning(f"{prefix}第{page_num}页未找到商品，停止")
+            break
+
+        logger.info(f"{prefix}第{page_num}页共 {len(items)} 个商品")
+
+        for item_el in items:
+            if cancel_check and cancel_check():
+                return added_count, local_amount
+            if added_count >= max_items:
+                return added_count, local_amount
+            if breaker.should_abort():
+                break
+            if _should_skip_item(item_el):
+                continue
+
+            if local_amount >= target:
+                logger.info(f"{prefix}本地累计 ¥{local_amount:.2f} 已达目标 ¥{target}")
+                return added_count, local_amount
+
+            if strategy == "not_exceed":
+                est_price = _get_item_price(item_el)
+                if est_price > 0 and local_amount + est_price > target:
+                    continue
+
+            if check_for_verification(shop_page):
+                wait_for_verification_clear(shop_page)
+
+            item_price = add_item_to_cart(context, item_el, shop_page=shop_page)
+            if item_price > 0:
+                added_count += 1
+                local_amount += item_price
+                breaker.record_success()
+                logger.info(f"{prefix}[{added_count}] 商品 ¥{item_price:.2f} | 累计 ¥{local_amount:.2f} / ¥{target}")
+                print(f"  {prefix}已加入 {added_count} 件 | ¥{item_price:.2f} | 累计 ¥{local_amount:.2f} / ¥{target}")
+                if progress_callback:
+                    try:
+                        progress_callback(added_count, item_price, local_amount, target, page_num)
+                    except Exception:
+                        pass
+            else:
+                breaker.record_failure()
+
+            if local_amount - last_verified_amount >= verify_interval:
+                logger.info(f"{prefix}触发校准")
+                real_amount, success = verify_cart_amount(context)
+                if success and real_amount > 0:
+                    local_amount = real_amount
+                    last_verified_amount = real_amount
+                else:
+                    last_verified_amount = local_amount
+                if local_amount >= target:
+                    return added_count, local_amount
+
+            random_delay(0.5, 1.5)
+
+        logger.info(f"{prefix}第{page_num}页完毕，尝试翻页...")
+        if not go_to_next_page(shop_page):
+            logger.info(f"{prefix}已到最后一页")
+            break
+        page_num += 1
+        random_delay(1.5, 3.0)
+
+    return added_count, local_amount
+
+
 def run_cart_filling(context, shop_page, cart_config: dict, progress_callback=None, cancel_check=None):
     """
     主循环：遍历全店商品，逐个打开详情页加入采购车，直到达到目标金额。
@@ -733,115 +827,52 @@ def run_cart_filling(context, shop_page, cart_config: dict, progress_callback=No
     target = cart_config.get("target_amount", 10000)
     strategy = cart_config.get("amount_strategy", "not_exceed")
     max_items = cart_config.get("max_items", 200)
+    purchase_mode = cart_config.get("purchase_mode", "normal")
     verify_interval = 500  # 每累计约 ¥500 校准一次
 
-    logger.info(f"开始填充采购车 | 目标金额: ¥{target} | 策略: {strategy}")
+    logger.info(f"开始填充采购车 | 目标金额: ¥{target} | 策略: {strategy} | 模式: {purchase_mode}")
 
     added_count = 0
     local_amount = 0.0          # 程序本地累计金额
     last_verified_amount = 0.0  # 上次校准时的金额
     page_num = 1
 
-    breaker = CircuitBreaker(threshold=5)
+    # 新品采购模式：先进新品专区采购，不足再回全部商品
+    if purchase_mode == "new_product":
+        logger.info("新品采购模式：优先采购当日上新商品")
+        # 记住全店商品页 URL，后面回来用
+        shop_url = shop_page.url
 
-    while added_count < max_items:
-        # 检查取消
-        if cancel_check and cancel_check():
-            logger.info("收到取消指令，停止加购")
-            break
+        if enter_new_product_zone(shop_page):
+            select_today_new_products(shop_page)
 
-        # 检查熔断器
-        if breaker.should_abort():
-            logger.error(f"[熔断] 连续失败 {breaker.consecutive_failures} 次，中止加购")
-            break
+            # 采购新品区商品（和正常采购一样的循环，只是数据源是新品区）
+            added_count, local_amount = _fill_cart_from_current_page(
+                context, shop_page, cart_config, added_count, local_amount,
+                last_verified_amount, verify_interval, progress_callback, cancel_check,
+                label="新品"
+            )
 
-        # 熔断级别 1：刷新页面
-        if breaker.level >= 1 and breaker.consecutive_failures % 5 == 0:
-            logger.warning(f"[自愈] 连续失败 {breaker.consecutive_failures} 次，刷新店铺页面...")
-            try_refresh_page(shop_page)
-
-        items, item_sel = get_shop_items(shop_page)
-        if not items:
-            logger.warning(f"第{page_num}页未找到商品，停止")
-            break
-
-        logger.info(f"第{page_num}页共 {len(items)} 个商品")
-
-        for item_el in items:
-            # 检查取消
-            if cancel_check and cancel_check():
-                logger.info("收到取消指令，停止加购")
+            if local_amount >= target or added_count >= max_items:
+                logger.info(f"新品采购已满足目标: {added_count} 件 ¥{local_amount:.2f}")
                 return added_count
 
-            if added_count >= max_items:
-                logger.info(f"已达最大商品数 {max_items}，停止")
-                return added_count
+            logger.info(f"新品采购后: {added_count} 件 ¥{local_amount:.2f}，不足目标 ¥{target}，转入全部商品")
 
-            if breaker.should_abort():
-                break
+            # 回到全部商品页
+            try:
+                shop_page.goto(shop_url, wait_until="domcontentloaded")
+                shop_page.wait_for_timeout(3000)
+            except Exception:
+                pass
+        else:
+            logger.warning("未能进入新品专区，按正常模式采购")
 
-            if _should_skip_item(item_el):
-                logger.debug("跳过无货/询价商品")
-                continue
-
-            # 检查是否已达目标
-            if local_amount >= target:
-                logger.info(f"本地累计金额 ¥{local_amount:.2f} 已达目标 ¥{target}，停止")
-                return added_count
-
-            if strategy == "not_exceed":
-                est_price = _get_item_price(item_el)
-                if est_price > 0 and local_amount + est_price > target:
-                    logger.info(f"加入此商品(预估¥{est_price:.2f})后将超目标，跳过")
-                    continue
-
-            # 检测验证码
-            if check_for_verification(shop_page):
-                wait_for_verification_clear(shop_page)
-
-            # 加入采购车（返回实际价格）
-            item_price = add_item_to_cart(context, item_el, shop_page=shop_page)
-            if item_price > 0:
-                added_count += 1
-                local_amount += item_price
-                breaker.record_success()
-                logger.info(f"[{added_count}] 已加入采购车 | 商品价格: ¥{item_price:.2f} | 本地累计: ¥{local_amount:.2f} / ¥{target}")
-                print(f"  已加入 {added_count} 件 | 商品价格: ¥{item_price:.2f} | 累计: ¥{local_amount:.2f} / 目标: ¥{target}")
-                if progress_callback:
-                    try:
-                        progress_callback(added_count, item_price, local_amount, target, page_num)
-                    except Exception:
-                        pass
-            else:
-                breaker.record_failure()
-                if breaker.level >= 1:
-                    logger.warning(f"[熔断] 加购失败，连续失败 {breaker.consecutive_failures} 次（级别{breaker.level}）")
-
-            # 定期校准：新标签页打开采购车读取实际金额，不影响当前店铺页
-            if local_amount - last_verified_amount >= verify_interval:
-                logger.info(f"本地累计已增长 ¥{local_amount - last_verified_amount:.2f}，触发采购车校准")
-                real_amount, success = verify_cart_amount(context)
-                if success and real_amount > 0:
-                    logger.info(f"校准: 本地记录 ¥{local_amount:.2f} → 采购车实际 ¥{real_amount:.2f}")
-                    local_amount = real_amount
-                    last_verified_amount = real_amount
-                else:
-                    logger.warning("校准失败，继续使用本地累计金额")
-                    last_verified_amount = local_amount
-
-                if local_amount >= target:
-                    logger.info(f"校准后金额 ¥{local_amount:.2f} 已达目标 ¥{target}，停止")
-                    return added_count
-
-            random_delay(0.5, 1.5)
-
-        # 翻页（翻页控件可能在 DOM 中但被隐藏，通过 JS 直接 click）
-        logger.info(f"第{page_num}页处理完毕，尝试翻页...")
-        if not go_to_next_page(shop_page):
-            logger.info("已到最后一页，停止")
-            break
-        page_num += 1
-        random_delay(1.5, 3.0)
+    # 全部商品采购（正常模式直接走这里，新品模式不足时也走这里）
+    added_count, local_amount = _fill_cart_from_current_page(
+        context, shop_page, cart_config, added_count, local_amount,
+        last_verified_amount, verify_interval, progress_callback, cancel_check
+    )
 
     logger.info(f"采购车填充完成，共加入 {added_count} 件商品，本地累计: ¥{local_amount:.2f}")
     return added_count

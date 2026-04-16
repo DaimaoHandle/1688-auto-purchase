@@ -573,6 +573,96 @@ def _enter_shop_from_detail(context, detail_page):
     return shop_page
 
 
+def enter_new_product_zone(shop_page) -> bool:
+    """
+    在全店商品页中点击"新品专区"标签。
+    返回是否成功进入。
+    """
+    try:
+        result = shop_page.evaluate("""() => {
+            var all = document.querySelectorAll('a, div, span, li, button');
+            for (var i = 0; i < all.length; i++) {
+                var txt = String(all[i].innerText || '').trim();
+                if ((txt.indexOf('新品') !== -1 || txt.indexOf('上新') !== -1) && txt.length < 15) {
+                    var r = all[i].getBoundingClientRect();
+                    if (r.width > 10 && r.height > 10 && r.top > 0 && r.top < window.innerHeight) {
+                        all[i].click();
+                        return {clicked: true, txt: txt};
+                    }
+                }
+            }
+            return {clicked: false};
+        }""")
+        if result and result.get('clicked'):
+            shop_page.wait_for_timeout(3000)
+            logger.info(f"已进入新品专区: {result.get('txt')}")
+            return True
+        else:
+            logger.warning("未找到新品专区入口")
+            return False
+    except Exception as e:
+        logger.warning(f"进入新品专区失败: {e}")
+        return False
+
+
+def select_today_new_products(shop_page) -> bool:
+    """
+    在新品专区中选择今日上新日期。
+    返回是否成功选择。
+    """
+    from datetime import datetime
+    today_str = datetime.now().strftime("%m-%d")  # 如 "04-16"
+    today_str2 = datetime.now().strftime("%-m-%-d")  # 如 "4-16"（无前导零）
+    today_str3 = datetime.now().strftime("%m月%d日")  # 如 "04月16日"
+    today_day = datetime.now().strftime("%-d")  # 如 "16"
+
+    try:
+        result = shop_page.evaluate("""(params) => {
+            var candidates = params.dates;
+            var all = document.querySelectorAll('a, div, span, li, button');
+            // 先找精确匹配今天日期的元素
+            for (var i = 0; i < all.length; i++) {
+                var txt = String(all[i].innerText || '').trim();
+                for (var d = 0; d < candidates.length; d++) {
+                    if (txt.indexOf(candidates[d]) !== -1 && txt.length < 20) {
+                        var r = all[i].getBoundingClientRect();
+                        if (r.width > 5 && r.height > 5) {
+                            all[i].click();
+                            return {clicked: true, txt: txt, match: candidates[d]};
+                        }
+                    }
+                }
+            }
+            // 兜底：点击日期列表中的第一个（通常是最新的）
+            var dateItems = document.querySelectorAll('[class*="date"] li, [class*="date"] a, [class*="Date"] div');
+            if (dateItems.length > 0) {
+                dateItems[0].click();
+                return {clicked: true, txt: dateItems[0].innerText, match: 'first-item'};
+            }
+            return {clicked: false};
+        }""", {"dates": [today_str, today_str2, today_str3, today_day]})
+
+        if result and result.get('clicked'):
+            shop_page.wait_for_timeout(3000)
+            logger.info(f"已选择上新日期: {result.get('txt')} (匹配: {result.get('match')})")
+            return True
+        else:
+            logger.warning("未找到今日上新日期")
+            return False
+    except Exception as e:
+        logger.warning(f"选择上新日期失败: {e}")
+        return False
+
+
+def get_new_product_items(shop_page):
+    """
+    获取新品专区中当前显示的商品图片元素。
+    与 get_shop_items 类似，但作用于新品区域。
+    返回 (elements, selector) 元组。
+    """
+    return get_shop_items(shop_page)
+
+
 def _extract_shop_url(detail_url: str) -> str:
     """从商品详情URL提取店铺URL"""
     import re

@@ -477,6 +477,12 @@ html, body, #app { height: 100%; margin: 0; }
                 <el-option v-for="s in shopList" :key="s" :label="s" :value="s" />
             </el-select>
         </el-form-item>
+        <el-form-item label="采购模式">
+            <el-select v-model="configForm.purchaseMode" style="width:100%">
+                <el-option label="正常采购" value="normal" />
+                <el-option label="新品采购（优先当日上新）" value="new_product" />
+            </el-select>
+        </el-form-item>
         <el-form-item label="采购目标金额">
             <el-input-number v-model="configForm.targetAmount" :min="100" :step="500" style="width:100%" />
         </el-form-item>
@@ -716,7 +722,7 @@ const app = createApp({
         ];
         const configForm = reactive({
             shopName: '', targetAmount: 2000, orderLimit: 500,
-            shippingReserve: 15, maxItems: 200, imageId: null,
+            purchaseMode: 'normal', shippingReserve: 15, maxItems: 200, imageId: null,
             selectedImage: '', imagePreview: null,
         });
 
@@ -909,6 +915,7 @@ const app = createApp({
                 configForm.shopName = (cfg.search||{}).target_shop_name || '';
                 configForm.targetAmount = (cfg.cart||{}).target_amount || 2000;
                 configForm.orderLimit = (cfg.cart||{}).order_limit || 500;
+                configForm.purchaseMode = (cfg.cart||{}).purchase_mode || 'normal';
                 configForm.shippingReserve = (cfg.cart||{}).shipping_reserve || 15;
                 configForm.maxItems = (cfg.cart||{}).max_items || 200;
                 if (cfgData.image_id) { configForm.selectedImage = cfgData.image_id; configForm.imageId = cfgData.image_id; }
@@ -941,7 +948,7 @@ const app = createApp({
             const config = {
                 browser: {type:'chromium', headless:false, slow_mo:100, profile_dir:'~/1688/browser_profile'},
                 search: {image_path:'', target_shop_name:configForm.shopName},
-                cart: {target_amount:configForm.targetAmount, amount_strategy:'not_exceed', max_items:configForm.maxItems, order_limit:configForm.orderLimit, shipping_reserve:configForm.shippingReserve},
+                cart: {target_amount:configForm.targetAmount, amount_strategy:'not_exceed', purchase_mode:configForm.purchaseMode, max_items:configForm.maxItems, order_limit:configForm.orderLimit, shipping_reserve:configForm.shippingReserve},
                 timeouts: {page_load:30000, element_wait:10000, login_wait:120000},
                 logging: {level:'INFO', file:'logs/app.log'},
             };
