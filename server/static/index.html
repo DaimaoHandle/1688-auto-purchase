@@ -11,7 +11,7 @@ body { font-family: -apple-system, "Microsoft YaHei", sans-serif; background: #f
 .header h1 { font-size: 18px; font-weight: 500; }
 .header .stats { font-size: 13px; color: #aaa; }
 .container { max-width: 1200px; margin: 24px auto; padding: 0 16px; }
-.node-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 16px; }
+.node-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 16px; }
 .node-card { background: #fff; border-radius: 8px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
 .node-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
 .node-name { font-size: 16px; font-weight: 600; }
@@ -33,8 +33,6 @@ body { font-family: -apple-system, "Microsoft YaHei", sans-serif; background: #f
 .btn-success:hover { background: #16a34a; }
 .btn-danger { background: #ef4444; color: #fff; }
 .btn-danger:hover { background: #dc2626; }
-.btn-warning { background: #f59e0b; color: #fff; }
-.btn-warning:hover { background: #d97706; }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .actions { margin-top: 10px; display: flex; gap: 4px; flex-wrap: wrap; }
 .add-node { margin-bottom: 16px; text-align: right; }
@@ -45,6 +43,21 @@ body { font-family: -apple-system, "Microsoft YaHei", sans-serif; background: #f
 .log-entry.INFO { color: #a5b4fc; }
 .progress-bar { margin-top: 8px; height: 6px; background: #e5e7eb; border-radius: 3px; overflow: hidden; }
 .progress-fill { height: 100%; background: #3b82f6; transition: width 0.3s; border-radius: 3px; }
+/* Modal */
+.modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 100; justify-content: center; align-items: center; }
+.modal-overlay.show { display: flex; }
+.modal { background: #fff; border-radius: 8px; padding: 24px; width: 500px; max-height: 80vh; overflow-y: auto; }
+.modal h2 { font-size: 16px; margin-bottom: 16px; }
+.form-group { margin-bottom: 12px; }
+.form-group label { display: block; font-size: 13px; color: #666; margin-bottom: 4px; }
+.form-group input, .form-group select { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px; }
+.form-group .hint { font-size: 11px; color: #999; margin-top: 2px; }
+.form-actions { margin-top: 16px; display: flex; gap: 8px; justify-content: flex-end; }
+.form-row { display: flex; gap: 12px; }
+.form-row .form-group { flex: 1; }
+.upload-area { border: 2px dashed #ddd; border-radius: 4px; padding: 16px; text-align: center; cursor: pointer; font-size: 13px; color: #999; }
+.upload-area:hover { border-color: #3b82f6; color: #3b82f6; }
+.upload-area.has-file { border-color: #22c55e; color: #22c55e; }
 </style>
 </head>
 <body>
@@ -57,6 +70,57 @@ body { font-family: -apple-system, "Microsoft YaHei", sans-serif; background: #f
         <button class="btn btn-primary" onclick="addNode()">+ 添加节点</button>
     </div>
     <div class="node-grid" id="nodeGrid"></div>
+</div>
+
+<!-- 配置编辑弹窗 -->
+<div class="modal-overlay" id="configModal">
+<div class="modal">
+    <h2 id="configModalTitle">节点配置</h2>
+    <input type="hidden" id="cfgNodeId">
+
+    <div class="form-group">
+        <label>搜索图片</label>
+        <div class="upload-area" id="uploadArea" onclick="document.getElementById('imageFile').click()">
+            点击上传搜索图片（或已有图片）
+        </div>
+        <input type="file" id="imageFile" accept="image/*" style="display:none" onchange="onImageSelected(this)">
+        <select id="existingImage" style="margin-top:6px;width:100%;padding:6px;font-size:12px">
+            <option value="">-- 或选择已上传的图片 --</option>
+        </select>
+    </div>
+
+    <div class="form-group">
+        <label>目标店铺名称</label>
+        <input type="text" id="cfgShopName" placeholder="支持部分匹配">
+    </div>
+
+    <div class="form-row">
+        <div class="form-group">
+            <label>采购目标金额（元）</label>
+            <input type="number" id="cfgTargetAmount" value="2000">
+        </div>
+        <div class="form-group">
+            <label>每单限额（元）</label>
+            <input type="number" id="cfgOrderLimit" value="500">
+        </div>
+    </div>
+
+    <div class="form-row">
+        <div class="form-group">
+            <label>运费预留（元）</label>
+            <input type="number" id="cfgShippingReserve" value="15">
+        </div>
+        <div class="form-group">
+            <label>最大加购数量</label>
+            <input type="number" id="cfgMaxItems" value="200">
+        </div>
+    </div>
+
+    <div class="form-actions">
+        <button class="btn" onclick="closeConfigModal()">取消</button>
+        <button class="btn btn-primary" onclick="saveConfig()">保存配置</button>
+    </div>
+</div>
 </div>
 
 <script>
@@ -72,61 +136,45 @@ const STATUS_LABELS = {
 let nodes = {};
 let nodeLogs = {};
 let ws = null;
+let pendingImageId = null;
 
 function connectWS() {
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
     ws = new WebSocket(proto + '://' + location.host + '/ws/dashboard');
     ws.onopen = () => console.log('Dashboard WS connected');
     ws.onclose = () => setTimeout(connectWS, 3000);
-    ws.onmessage = (e) => {
-        try { handleMessage(JSON.parse(e.data)); } catch(err) {}
-    };
+    ws.onmessage = (e) => { try { handleMessage(JSON.parse(e.data)); } catch(err) {} };
 }
 
 function handleMessage(msg) {
     const p = msg.payload || {};
     const nodeId = p.node_id;
     if (!nodeId) return;
-
-    if (!nodes[nodeId]) {
-        nodes[nodeId] = { id: nodeId, name: p.name || nodeId, online: false, task_status: null, task_progress: null, task_id: null };
-    }
+    if (!nodes[nodeId]) nodes[nodeId] = { id: nodeId, name: p.name || nodeId, online: false, task_status: null, task_progress: null, task_id: null };
     if (!nodeLogs[nodeId]) nodeLogs[nodeId] = [];
 
     if (msg.type === 'status_update') {
         if (p.status === 'online') { nodes[nodeId].online = true; nodes[nodeId].name = p.name || nodes[nodeId].name; }
         else if (p.status === 'offline') { nodes[nodeId].online = false; nodes[nodeId].task_status = null; }
-        else {
-            nodes[nodeId].task_status = p.status;
-            if (p.task_id) nodes[nodeId].task_id = p.task_id;
-        }
+        else { nodes[nodeId].task_status = p.status; if (p.task_id) nodes[nodeId].task_id = p.task_id; }
     } else if (msg.type === 'progress_update') {
-        nodes[nodeId].task_progress = p;
-        nodes[nodeId].task_status = 'filling_cart';
+        nodes[nodeId].task_progress = p; nodes[nodeId].task_status = 'filling_cart';
         if (p.task_id) nodes[nodeId].task_id = p.task_id;
     } else if (msg.type === 'log_entry') {
-        const logs = nodeLogs[nodeId];
-        logs.push(p);
+        const logs = nodeLogs[nodeId]; logs.push(p);
         if (logs.length > 200) logs.splice(0, logs.length - 200);
-        updateLogPanel(nodeId);
-        return; // don't re-render cards for every log
-    } else if (msg.type === 'task_report') {
-        nodes[nodeId].task_status = 'completed';
-    }
-
+        updateLogPanel(nodeId); return;
+    } else if (msg.type === 'task_report') { nodes[nodeId].task_status = 'completed'; }
     renderNodes();
 }
 
 function renderNodes() {
     const grid = document.getElementById('nodeGrid');
     const nodeList = Object.values(nodes);
-
     if (nodeList.length === 0) {
         grid.innerHTML = '<div class="empty"><p>暂无节点</p><p>点击"添加节点"生成 Agent 配置</p></div>';
-        updateStats(nodeList);
-        return;
+        updateStats(nodeList); return;
     }
-
     grid.innerHTML = nodeList.map(n => {
         const dotClass = n.online ? 'online' : 'offline';
         const st = n.task_status;
@@ -142,18 +190,17 @@ function renderNodes() {
             const pct = p.target_amount > 0 ? Math.min(100, (p.local_amount / p.target_amount) * 100) : 0;
             progressHtml = '<div class="node-info">'
                 + '<span class="label">已加购:</span> ' + (p.items_added || 0) + ' 件 | '
-                + '<span class="label">累计:</span> ¥' + (p.local_amount || 0).toFixed(2)
-                + ' / ¥' + (p.target_amount || 0)
-                + '</div>'
-                + '<div class="progress-bar"><div class="progress-fill" style="width:' + pct.toFixed(1) + '%"></div></div>';
+                + '<span class="label">累计:</span> \u00a5' + (p.local_amount || 0).toFixed(2)
+                + ' / \u00a5' + (p.target_amount || 0)
+                + '</div><div class="progress-bar"><div class="progress-fill" style="width:' + pct.toFixed(1) + '%"></div></div>';
         }
 
-        // 操作按钮
         let actionsHtml = '<div class="actions">';
+        actionsHtml += '<button class="btn btn-primary" onclick="openConfigModal(\'' + n.id + '\',\'' + (n.name||'').replace(/'/g,"\\'") + '\')">配置</button>';
         if (!n.online) {
-            actionsHtml += '<span style="font-size:12px;color:#999">节点离线</span>';
+            actionsHtml += '<span style="font-size:12px;color:#999;margin-left:4px">节点离线</span>';
         } else if (!st || st === 'idle' || st === 'completed' || st === 'failed' || st === 'cancelled') {
-            actionsHtml += '<button class="btn btn-success" onclick="startTask(\'' + n.id + '\')">启动任务</button>';
+            actionsHtml += '<button class="btn btn-success" onclick="startTask(\'' + n.id + '\')">启动</button>';
         } else if (st === 'awaiting_approval') {
             actionsHtml += '<button class="btn btn-success" onclick="approveCheckout(\'' + n.task_id + '\')">确认结算</button>';
             actionsHtml += '<button class="btn btn-danger" onclick="rejectCheckout(\'' + n.task_id + '\')">取消结算</button>';
@@ -164,40 +211,26 @@ function renderNodes() {
         actionsHtml += '</div>';
 
         return '<div class="node-card" id="card-' + n.id + '">'
-            + '<div class="node-header">'
-            + '  <span class="node-name"><span class="status-dot ' + dotClass + '"></span>' + (n.name || n.id) + '</span>'
-            + '  <span style="font-size:12px;color:#999">' + n.id + '</span>'
-            + '</div>'
+            + '<div class="node-header"><span class="node-name"><span class="status-dot ' + dotClass + '"></span>' + (n.name || n.id) + '</span>'
+            + '<span style="font-size:12px;color:#999">' + n.id + '</span></div>'
             + '<div class="task-status ' + taskClass + '">' + statusText + '</div>'
-            + progressHtml
-            + actionsHtml
-            + '<div class="log-panel" id="log-' + n.id + '"></div>'
-            + '</div>';
+            + progressHtml + actionsHtml
+            + '<div class="log-panel" id="log-' + n.id + '"></div></div>';
     }).join('');
-
-    // 恢复日志面板状态
-    for (const nid in nodeLogs) {
-        const panel = document.getElementById('log-' + nid);
-        if (panel && panel.classList.contains('show')) updateLogPanel(nid);
-    }
-
     updateStats(nodeList);
 }
 
 function updateStats(nodeList) {
     const online = nodeList.filter(n => n.online).length;
     const active = nodeList.filter(n => n.online && n.task_status && !['idle','completed','failed','cancelled'].includes(n.task_status)).length;
-    document.getElementById('stats').textContent =
-        '节点: ' + nodeList.length + ' | 在线: ' + online + ' | 运行中: ' + active;
+    document.getElementById('stats').textContent = '节点: ' + nodeList.length + ' | 在线: ' + online + ' | 运行中: ' + active;
 }
 
 function updateLogPanel(nodeId) {
     const panel = document.getElementById('log-' + nodeId);
     if (!panel || !panel.classList.contains('show')) return;
     const logs = nodeLogs[nodeId] || [];
-    panel.innerHTML = logs.slice(-100).map(l =>
-        '<div class="log-entry ' + (l.level || '') + '">' + (l.message || '') + '</div>'
-    ).join('');
+    panel.innerHTML = logs.slice(-100).map(l => '<div class="log-entry ' + (l.level||'') + '">' + (l.message||'') + '</div>').join('');
     panel.scrollTop = panel.scrollHeight;
 }
 
@@ -208,73 +241,147 @@ function toggleLog(nodeId) {
     if (panel.classList.contains('show')) updateLogPanel(nodeId);
 }
 
-async function startTask(nodeId) {
-    // 简单启动：使用服务器存储的配置（后续阶段实现配置管理）
-    // 目前用空 config，Agent 会用本地 config.json
+// === 配置弹窗 ===
+async function openConfigModal(nodeId, nodeName) {
+    document.getElementById('cfgNodeId').value = nodeId;
+    document.getElementById('configModalTitle').textContent = (nodeName || nodeId) + ' - 配置';
+    pendingImageId = null;
+    document.getElementById('uploadArea').textContent = '点击上传搜索图片';
+    document.getElementById('uploadArea').className = 'upload-area';
+    document.getElementById('imageFile').value = '';
+
+    // 加载已有图片列表
     try {
-        const res = await fetch('/api/tasks/nodes/' + nodeId + '/start', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({config: {}})
+        const res = await fetch('/api/images');
+        const imgs = await res.json();
+        const sel = document.getElementById('existingImage');
+        sel.innerHTML = '<option value="">-- 或选择已上传的图片 --</option>';
+        imgs.forEach(img => {
+            sel.innerHTML += '<option value="' + img.id + '">' + img.filename + ' (' + Math.round(img.size/1024) + 'KB)</option>';
         });
+    } catch(e) {}
+
+    // 加载已有配置
+    try {
+        const res = await fetch('/api/nodes/' + nodeId + '/config');
         const data = await res.json();
-        if (res.ok) {
-            console.log('任务已启动:', data.task_id);
-        } else {
-            alert('启动失败: ' + (data.detail || JSON.stringify(data)));
+        const cfg = data.config || {};
+        document.getElementById('cfgShopName').value = (cfg.search || {}).target_shop_name || '';
+        document.getElementById('cfgTargetAmount').value = (cfg.cart || {}).target_amount || 2000;
+        document.getElementById('cfgOrderLimit').value = (cfg.cart || {}).order_limit || 500;
+        document.getElementById('cfgShippingReserve').value = (cfg.cart || {}).shipping_reserve || 15;
+        document.getElementById('cfgMaxItems').value = (cfg.cart || {}).max_items || 200;
+        if (data.image_id) {
+            document.getElementById('existingImage').value = data.image_id;
+            pendingImageId = data.image_id;
         }
-    } catch(err) { alert('请求失败: ' + err.message); }
+    } catch(e) {}
+
+    document.getElementById('configModal').classList.add('show');
 }
 
+function closeConfigModal() {
+    document.getElementById('configModal').classList.remove('show');
+}
+
+async function onImageSelected(input) {
+    if (!input.files || !input.files[0]) return;
+    const file = input.files[0];
+    const area = document.getElementById('uploadArea');
+    area.textContent = '上传中...';
+
+    const formData = new FormData();
+    formData.append('file', file);
+    try {
+        const res = await fetch('/api/images', { method: 'POST', body: formData });
+        const data = await res.json();
+        pendingImageId = data.id;
+        area.textContent = file.name + ' (' + Math.round(data.size/1024) + 'KB)';
+        area.className = 'upload-area has-file';
+        document.getElementById('existingImage').value = '';
+        // 刷新图片列表
+        const res2 = await fetch('/api/images');
+        const imgs = await res2.json();
+        const sel = document.getElementById('existingImage');
+        sel.innerHTML = '<option value="">-- 或选择已上传的图片 --</option>';
+        imgs.forEach(img => { sel.innerHTML += '<option value="' + img.id + '">' + img.filename + '</option>'; });
+    } catch(e) { area.textContent = '上传失败'; }
+}
+
+async function saveConfig() {
+    const nodeId = document.getElementById('cfgNodeId').value;
+    const imageId = pendingImageId || document.getElementById('existingImage').value || null;
+
+    const config = {
+        browser: { type: 'chromium', headless: false, slow_mo: 100, profile_dir: '~/1688/browser_profile' },
+        search: {
+            image_path: '',
+            target_shop_name: document.getElementById('cfgShopName').value,
+        },
+        cart: {
+            target_amount: parseFloat(document.getElementById('cfgTargetAmount').value) || 2000,
+            amount_strategy: 'not_exceed',
+            max_items: parseInt(document.getElementById('cfgMaxItems').value) || 200,
+            order_limit: parseFloat(document.getElementById('cfgOrderLimit').value) || 500,
+            shipping_reserve: parseFloat(document.getElementById('cfgShippingReserve').value) || 15,
+        },
+        timeouts: { page_load: 30000, element_wait: 10000, login_wait: 120000 },
+        logging: { level: 'INFO', file: 'logs/app.log' },
+    };
+
+    try {
+        const res = await fetch('/api/nodes/' + nodeId + '/config', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ config: config, image_id: imageId }),
+        });
+        if (res.ok) {
+            alert('配置已保存');
+            closeConfigModal();
+        } else {
+            const data = await res.json();
+            alert('保存失败: ' + (data.detail || ''));
+        }
+    } catch(e) { alert('保存失败: ' + e.message); }
+}
+
+// === 任务操作 ===
+async function startTask(nodeId) {
+    try {
+        const res = await fetch('/api/tasks/nodes/' + nodeId + '/start', { method: 'POST' });
+        const data = await res.json();
+        if (!res.ok) alert('启动失败: ' + (data.detail || JSON.stringify(data)));
+    } catch(e) { alert('请求失败: ' + e.message); }
+}
 async function stopTask(nodeId) {
     if (!confirm('确认停止任务？')) return;
-    try {
-        await fetch('/api/tasks/nodes/' + nodeId + '/stop', { method: 'POST' });
-    } catch(err) { alert('请求失败: ' + err.message); }
+    try { await fetch('/api/tasks/nodes/' + nodeId + '/stop', { method: 'POST' }); } catch(e) { alert(e.message); }
 }
-
 async function approveCheckout(taskId) {
-    try {
-        await fetch('/api/tasks/' + taskId + '/approve', { method: 'POST' });
-    } catch(err) { alert('请求失败: ' + err.message); }
+    try { await fetch('/api/tasks/' + taskId + '/approve', { method: 'POST' }); } catch(e) { alert(e.message); }
 }
-
 async function rejectCheckout(taskId) {
-    try {
-        await fetch('/api/tasks/' + taskId + '/reject', { method: 'POST' });
-    } catch(err) { alert('请求失败: ' + err.message); }
+    try { await fetch('/api/tasks/' + taskId + '/reject', { method: 'POST' }); } catch(e) { alert(e.message); }
 }
-
 async function addNode() {
-    const name = prompt('输入节点名称（如：服务器A-张三）：');
+    const name = prompt('输入节点名称：');
     if (name === null) return;
     try {
-        const res = await fetch('/api/nodes/tokens', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({name: name || ''})
-        });
+        const res = await fetch('/api/nodes/tokens', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({name:name||''}) });
         const data = await res.json();
-        const configJson = JSON.stringify({
-            server_url: 'ws://' + location.host + '/ws/agent',
-            node_id: data.node_id,
-            token: data.token
-        }, null, 2);
         alert('节点已创建！\n\n节点ID: ' + data.node_id + '\n节点名: ' + data.name
-            + '\n\n请在采购服务器的 agent/agent_config.json 中填入:\n\n' + configJson);
+            + '\n\n请在采购服务器的 agent/agent_config.json 中填入:\n\n'
+            + JSON.stringify({server_url:'ws://'+location.host+'/ws/agent',node_id:data.node_id,token:data.token}, null, 2));
         loadNodes();
-    } catch(err) { alert('创建失败: ' + err.message); }
+    } catch(e) { alert('创建失败: ' + e.message); }
 }
-
 async function loadNodes() {
     try {
         const res = await fetch('/api/nodes');
         const list = await res.json();
-        for (const n of list) {
-            nodes[n.id] = { id: n.id, name: n.name, online: n.online, task_status: n.task_status, task_progress: n.task_progress, task_id: null };
-        }
+        for (const n of list) nodes[n.id] = { id:n.id, name:n.name, online:n.online, task_status:n.task_status, task_progress:n.task_progress, task_id:null };
         renderNodes();
-    } catch(err) { console.error('加载节点失败', err); }
+    } catch(e) {}
 }
 
 loadNodes();

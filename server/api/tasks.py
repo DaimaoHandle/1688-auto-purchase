@@ -1,11 +1,13 @@
 """
 任务控制 API — 启动、停止、审批结算。
 """
+import json
 import uuid
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 from typing import Optional
 
+from server.db.database import get_db
 from server.services.node_manager import node_manager
 from shared.protocol import (
     make_message, MSG_START_TASK, MSG_STOP_TASK, MSG_APPROVE_CHECKOUT, MSG_REJECT_CHECKOUT,
@@ -14,15 +16,9 @@ from shared.protocol import (
 router = APIRouter(prefix="/api/tasks", tags=["tasks"])
 
 
-class StartTaskRequest(BaseModel):
-    config: dict = {}
-    image_url: Optional[str] = ""
-    image_filename: Optional[str] = ""
-
-
 @router.post("/nodes/{node_id}/start")
-async def start_task(node_id: str, req: StartTaskRequest):
-    """向指定节点发送启动任务指令。"""
+async def start_task(node_id: str, request: Request):
+    """向指定节点发送启动任务指令。使用该节点在数据库中存储的配置和图片。"""
     node = node_manager.get(node_id)
     if not node:
         raise HTTPException(404, "节点不存在")
@@ -31,13 +27,39 @@ async def start_task(node_id: str, req: StartTaskRequest):
     if node.task_status and node.task_status not in ("idle", "completed", "failed", "cancelled"):
         raise HTTPException(400, f"节点正在执行任务: {node.task_status}")
 
+    # 从数据库读取节点配置
+    config = {}
+    image_url = ""
+    image_filename = ""
+
+    db = await get_db()
+    try:
+        cursor = await db.execute(
+            "SELECT config_json, image_id FROM node_configs WHERE node_id = ?", (node_id,)
+        )
+        row = await cursor.fetchone()
+        if row:
+            config = json.loads(row["config_json"])
+            image_id = row["image_id"]
+            if image_id:
+                # 构建图片下载 URL（Agent 通过 HTTP GET 下载）
+                base_url = str(request.base_url).rstrip("/")
+                image_url = f"{base_url}/api/images/{image_id}"
+                # 获取文件名
+                img_cursor = await db.execute("SELECT filename FROM images WHERE id = ?", (image_id,))
+                img_row = await img_cursor.fetchone()
+                if img_row:
+                    image_filename = img_row["filename"]
+    finally:
+        await db.close()
+
     task_id = str(uuid.uuid4())[:8]
 
     await node.ws.send_text(make_message(MSG_START_TASK, {
         "task_id": task_id,
-        "config": req.config,
-        "image_url": req.image_url or "",
-        "image_filename": req.image_filename or "",
+        "config": config,
+        "image_url": image_url,
+        "image_filename": image_filename,
     }))
 
     node_manager.update_task_status(node_id, task_id, "starting")
