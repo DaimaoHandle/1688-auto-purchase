@@ -353,21 +353,6 @@ def _find_shop_goods_btn(detail_page):
     return None
 
 
-def _clean_shop_url(url: str) -> str:
-    """
-    去掉全店商品页 URL 中的 offerId、spm、td_page_id 等参数，
-    只保留干净的 offerlist.htm 地址，避免页面进入"相关商品"模式导致翻页控件被隐藏。
-    """
-    from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
-    parsed = urlparse(url)
-    # 只保留必要参数，去掉可能影响页面模式的参数
-    remove_params = {"offerId", "spm", "td_page_id"}
-    params = parse_qs(parsed.query)
-    cleaned = {k: v[0] for k, v in params.items() if k not in remove_params}
-    new_query = urlencode(cleaned) if cleaned else ""
-    return urlunparse((parsed.scheme, parsed.netloc, parsed.path, "", new_query, ""))
-
-
 def _enter_shop_from_detail(context, detail_page):
     """从商品详情页进入全店商品列表"""
     # 等待页面渲染完成
@@ -407,13 +392,6 @@ def _enter_shop_from_detail(context, detail_page):
     if not shop_page:
         save_screenshot(detail_page, "enter_shop_failed")
         raise RuntimeError("无法进入全店商品列表，请查看截图确认「商品」按钮是否存在")
-
-    # 用干净的 URL 重新加载（去掉 offerId 等参数，确保完整商品列表模式）
-    clean_url = _clean_shop_url(shop_page.url)
-    if clean_url != shop_page.url:
-        logger.info(f"用干净URL重新加载: {clean_url}")
-        shop_page.goto(clean_url, wait_until="domcontentloaded")
-        shop_page.wait_for_timeout(3000)
 
     logger.info(f"全店商品页: {shop_page.url}")
     return shop_page
