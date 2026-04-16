@@ -1,6 +1,6 @@
 import logging
 from src.utils import parse_price, save_screenshot, random_delay
-from src.shop import get_shop_items, go_to_next_page, enter_new_product_zone, select_today_new_products, get_new_product_items
+from src.shop import get_shop_items, go_to_next_page, enter_new_product_zone, select_today_new_products, get_new_product_items, click_sort_by_sales
 from src.selector_health import try_selectors, get_tracker
 from src.retry import CircuitBreaker, is_page_alive, check_for_verification, wait_for_verification_clear, try_refresh_page
 
@@ -755,7 +755,17 @@ def _fill_cart_from_current_page(context, shop_page, cart_config, added_count, l
 
         logger.info(f"{prefix}第{page_num}页共 {len(items)} 个商品")
 
-        for item_el in items:
+        # 优先采购无销量商品：将无销量的排到前面
+        def _has_sales(el):
+            try:
+                txt = el.inner_text() or ""
+                return "已售" in txt
+            except Exception:
+                return False
+
+        items_sorted = sorted(items, key=lambda el: (1 if _has_sales(el) else 0))
+
+        for item_el in items_sorted:
             if cancel_check and cancel_check():
                 return added_count, local_amount
             if added_count >= max_items:
@@ -840,20 +850,29 @@ def run_cart_filling(context, shop_page, cart_config: dict, progress_callback=No
     # 新品采购模式：先进新品专区采购，不足再回全部商品
     if purchase_mode == "new_product":
         logger.info("新品采购模式：优先采购当日上新商品")
-        # 记住全店商品页 URL，后面回来用
         shop_url = shop_page.url
+        new_product_page = None
 
         has_new = False
-        if enter_new_product_zone(shop_page):
-            has_new = select_today_new_products(shop_page)
+        new_product_page = enter_new_product_zone(context, shop_page)
+        if new_product_page:
+            has_new = select_today_new_products(new_product_page)
 
-        if has_new:
-            # 有今日上新，先采购新品
+        if has_new and new_product_page:
+            # 有今日上新，在新品页面采购
             added_count, local_amount = _fill_cart_from_current_page(
-                context, shop_page, cart_config, added_count, local_amount,
+                context, new_product_page, cart_config, added_count, local_amount,
                 last_verified_amount, verify_interval, progress_callback, cancel_check,
                 label="新品"
             )
+
+            # 关闭新品标签页（如果是新开的）
+            if new_product_page != shop_page:
+                try:
+                    new_product_page.close()
+                    logger.info("已关闭新品专区标签页")
+                except Exception:
+                    pass
 
             if local_amount >= target or added_count >= max_items:
                 logger.info(f"新品采购已满足目标: {added_count} 件 ¥{local_amount:.2f}")
@@ -862,6 +881,12 @@ def run_cart_filling(context, shop_page, cart_config: dict, progress_callback=No
             logger.info(f"新品采购后: {added_count} 件 ¥{local_amount:.2f}，不足目标 ¥{target}，转入全部商品")
         else:
             logger.info("今日无上新或未能进入新品专区，按正常模式采购全部商品")
+            # 关闭新品标签页（如果打开了但没有今日上新）
+            if new_product_page and new_product_page != shop_page:
+                try:
+                    new_product_page.close()
+                except Exception:
+                    pass
 
         # 回到全部商品页
         try:
@@ -869,6 +894,10 @@ def run_cart_filling(context, shop_page, cart_config: dict, progress_callback=No
             shop_page.wait_for_timeout(3000)
         except Exception:
             pass
+
+    # 全部商品采购前，点击销量排序（无销量商品优先）
+    logger.info("点击销量排序，优先采购无销量商品...")
+    click_sort_by_sales(shop_page)
 
     # 全部商品采购（正常模式直接走这里，新品模式不足时也走这里）
     added_count, local_amount = _fill_cart_from_current_page(

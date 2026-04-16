@@ -573,12 +573,16 @@ def _enter_shop_from_detail(context, detail_page):
     return shop_page
 
 
-def enter_new_product_zone(shop_page) -> bool:
+def enter_new_product_zone(context, shop_page):
     """
     在全店商品页中点击"新品专区"标签。
-    返回是否成功进入。
+    可能在当前页切换，也可能打开新标签页。
+    返回新品专区的 page 对象（可能是 shop_page 本身或新标签页），失败返回 None。
     """
     try:
+        # 记录当前标签数
+        pages_before = set(id(p) for p in context.pages)
+
         result = shop_page.evaluate("""() => {
             var all = document.querySelectorAll('a, div, span, li, button');
             for (var i = 0; i < all.length; i++) {
@@ -593,16 +597,27 @@ def enter_new_product_zone(shop_page) -> bool:
             }
             return {clicked: false};
         }""")
-        if result and result.get('clicked'):
-            shop_page.wait_for_timeout(3000)
-            logger.info(f"已进入新品专区: {result.get('txt')}")
-            return True
-        else:
+        if not result or not result.get('clicked'):
             logger.warning("未找到新品专区入口")
-            return False
+            return None
+
+        shop_page.wait_for_timeout(3000)
+        logger.info(f"已点击新品专区: {result.get('txt')}")
+
+        # 检查是否打开了新标签
+        pages_after = context.pages
+        new_pages = [p for p in pages_after if id(p) not in pages_before]
+        if new_pages:
+            new_page = new_pages[-1]
+            new_page.wait_for_load_state("domcontentloaded")
+            new_page.wait_for_timeout(3000)
+            logger.info(f"新品专区在新标签打开: {new_page.url}")
+            return new_page
+        else:
+            return shop_page
     except Exception as e:
         logger.warning(f"进入新品专区失败: {e}")
-        return False
+        return None
 
 
 def select_today_new_products(shop_page) -> bool:
@@ -643,6 +658,38 @@ def select_today_new_products(shop_page) -> bool:
             return False
     except Exception as e:
         logger.warning(f"选择上新日期失败: {e}")
+        return False
+
+
+def click_sort_by_sales(shop_page) -> bool:
+    """
+    在全店商品页点击"销量"排序按钮，使商品按销量从高到低排序。
+    这样无销量（已售0或无标记）的商品会排在后面/前面（取决于排序方向）。
+    """
+    try:
+        result = shop_page.evaluate("""() => {
+            var all = document.querySelectorAll('a, div, span, li, button');
+            for (var i = 0; i < all.length; i++) {
+                var txt = String(all[i].innerText || '').trim();
+                if (txt === '销量' || txt === '按销量') {
+                    var r = all[i].getBoundingClientRect();
+                    if (r.width > 10 && r.height > 10) {
+                        all[i].click();
+                        return {clicked: true, txt: txt};
+                    }
+                }
+            }
+            return {clicked: false};
+        }""")
+        if result and result.get('clicked'):
+            shop_page.wait_for_timeout(3000)
+            logger.info(f"已点击销量排序: {result.get('txt')}")
+            return True
+        else:
+            logger.warning("未找到销量排序按钮")
+            return False
+    except Exception as e:
+        logger.warning(f"点击销量排序失败: {e}")
         return False
 
 
