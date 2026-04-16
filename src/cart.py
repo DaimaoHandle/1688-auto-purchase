@@ -755,30 +755,33 @@ def _fill_cart_from_current_page(context, shop_page, cart_config, added_count, l
 
         logger.info(f"{prefix}第{page_num}页共 {len(items)} 个商品")
 
-        # 优先采购无销量商品：检查商品卡片（img的祖先容器）是否含"已售"
-        def _has_sales(el):
+        # 优先采购无销量商品：逐个检查每个 img 的父级卡片是否含"已售"
+        sales_flags = []
+        for item_el in items:
             try:
-                # img 元素自身没有文字，往上找父级卡片容器获取完整文字
-                result = shop_page.evaluate("""(img) => {
+                has = shop_page.evaluate("""(img) => {
                     var node = img;
-                    for (var i = 0; i < 6; i++) {
+                    for (var j = 0; j < 8; j++) {
                         node = node.parentElement;
                         if (!node) return false;
                         var txt = node.innerText || '';
                         if (txt.indexOf('已售') !== -1) return true;
-                        // 找到足够大的容器就停（商品卡片通常 200px+ 宽）
                         var r = node.getBoundingClientRect();
-                        if (r.width > 200 && r.height > 200) return txt.indexOf('已售') !== -1;
+                        if (r.width > 180 && r.height > 180) return txt.indexOf('已售') !== -1;
                     }
                     return false;
-                }""", el)
-                return bool(result)
+                }""", item_el)
+                sales_flags.append(bool(has))
             except Exception:
-                return False
+                sales_flags.append(False)
 
-        items_sorted = sorted(items, key=lambda el: (1 if _has_sales(el) else 0))
-        no_sales = sum(1 for el in items if not _has_sales(el))
+        no_sales = sales_flags.count(False)
         logger.info(f"{prefix}本页无销量: {no_sales} 个，有销量: {len(items) - no_sales} 个")
+
+        # 无销量排前面
+        items_with_flag = list(zip(items, sales_flags))
+        items_with_flag.sort(key=lambda x: (1 if x[1] else 0))
+        items_sorted = [item for item, _ in items_with_flag]
 
         for item_el in items_sorted:
             if cancel_check and cancel_check():
