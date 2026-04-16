@@ -1,0 +1,28 @@
+{
+  "browser": {
+    "type": "chromium",
+    "headless": false,
+    "slow_mo": 100,
+    "profile_dir": "~/1688/browser_profile"
+  },
+  "search": {
+    "image_path": "./your_product_image.png",
+    "target_shop_name": "你的目标店铺名称"
+  },
+  "cart": {
+    "target_amount": 2000,
+    "amount_strategy": "not_exceed",
+    "max_items": 200,
+    "order_limit": 500,
+    "shipping_reserve": 15
+  },
+  "timeouts": {
+    "page_load": 30000,
+    "element_wait": 10000,
+    "login_wait": 120000
+  },
+  "logging": {
+    "level": "INFO",
+    "file": "logs/app.log"
+  }
+}

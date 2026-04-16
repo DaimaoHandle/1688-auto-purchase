@@ -10,6 +10,7 @@ from src.login import wait_for_login
 from src.search import image_search
 from src.shop import find_shop_and_enter
 from src.cart import run_cart_filling, run_cart_checkout, capture_cart_url, set_cart_url
+from src.report import save_report
 
 
 def main():
@@ -21,6 +22,10 @@ def main():
     logger.info("=" * 60)
 
     playwright = browser = context = page = None
+    added = 0
+    orders = 0
+    errors = []
+
     try:
         # 初始化浏览器
         playwright, browser, context, page = init_browser(config)
@@ -36,6 +41,7 @@ def main():
             set_cart_url(cart_url)
         else:
             logger.warning("未能获取采购车URL，结算功能可能不可用")
+            errors.append("未能获取采购车URL")
 
         # 搜图
         image_path = config["search"]["image_path"]
@@ -60,20 +66,19 @@ def main():
             elif choice in ("n", "no", "否"):
                 logger.info("用户选择不结算，程序退出")
                 print("\n>>> 已取消结算，程序退出 <<<\n")
+                save_report(config, added, 0, errors)
                 return
             else:
                 print("  请输入 y 或 n")
 
-        # 结算：分组下单，每单不超过 500 元（预留运费空间）
+        # 结算：分组下单，每单不超过限额（预留运费空间）
         order_limit = config.get("cart", {}).get("order_limit", 500)
         shipping_reserve = config.get("cart", {}).get("shipping_reserve", 15)
         orders = run_cart_checkout(context, order_limit=order_limit, shipping_reserve=shipping_reserve)
 
         logger.info("=" * 60)
         logger.info(f"任务完成！共加入 {added} 件商品，生成 {orders} 笔订单")
-        logger.info("浏览器保持打开，请检查订单后手动关闭程序")
         logger.info("=" * 60)
-        print(f"\n>>> 任务完成！共 {added} 件商品，{orders} 笔订单 <<<\n")
 
         # 保持运行，等待用户手动退出
         input("按 Enter 键退出程序...")
@@ -82,16 +87,22 @@ def main():
         logger.info("用户中断，程序退出")
     except Exception as e:
         logger.error(f"程序异常退出: {e}", exc_info=True)
+        errors.append(str(e))
         if page:
             from src.utils import save_screenshot
             path = save_screenshot(page, "fatal_error")
             if path:
                 logger.error(f"错误截图已保存: {path}")
-        sys.exit(1)
     finally:
+        # 生成运行报告
+        try:
+            save_report(config, added, orders, errors)
+        except Exception:
+            pass
+
         if context:
             try:
-                context.close()  # persistent context 关闭时会自动保存 Profile
+                context.close()
             except Exception:
                 pass
         if browser:

@@ -16,6 +16,12 @@ cookies/
 *.jpg
 *.jpeg
 
+# 运行报告
+reports/
+
+# Docker
+.dockerignore
+
 # IDE
 .vscode/
 .idea/
