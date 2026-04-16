@@ -54,15 +54,23 @@ html, body, #app { height: 100%; margin: 0; }
         <el-menu :default-active="currentPage" background-color="#1d1e2c" text-color="#8c8fa0" active-text-color="#409eff" @select="onMenuSelect">
             <el-menu-item index="dashboard">
                 <el-icon><Monitor /></el-icon>
-                <span>控制台</span>
+                <span>总览</span>
             </el-menu-item>
             <el-menu-item index="nodes">
                 <el-icon><Connection /></el-icon>
                 <span>节点管理</span>
             </el-menu-item>
-            <el-menu-item index="reports">
+            <el-menu-item index="tasks">
+                <el-icon><List /></el-icon>
+                <span>任务中心</span>
+            </el-menu-item>
+            <el-menu-item index="data">
                 <el-icon><DataAnalysis /></el-icon>
-                <span>报告汇总</span>
+                <span>数据中心</span>
+            </el-menu-item>
+            <el-menu-item index="settings">
+                <el-icon><Setting /></el-icon>
+                <span>系统设置</span>
             </el-menu-item>
         </el-menu>
     </div>
@@ -173,8 +181,18 @@ html, body, #app { height: 100%; margin: 0; }
                 </el-table>
             </template>
 
-            <!-- 报告汇总页面 -->
-            <template v-if="currentPage === 'reports'">
+            <!-- 任务中心 -->
+            <template v-if="currentPage === 'tasks'">
+                <el-empty description="任务中心开发中" />
+            </template>
+
+            <!-- 系统设置 -->
+            <template v-if="currentPage === 'settings'">
+                <el-empty description="系统设置开发中" />
+            </template>
+
+            <!-- 数据中心 -->
+            <template v-if="currentPage === 'data'">
                 <!-- 统计卡片 -->
                 <div style="display:flex;gap:16px;margin-bottom:20px">
                     <el-card style="flex:1" shadow="hover">
@@ -377,7 +395,7 @@ const app = createApp({
             completed:'已完成', failed:'异常', cancelled:'已取消',
         };
 
-        const pageTitle = computed(() => ({dashboard:'控制台', nodes:'节点管理', reports:'报告汇总'}[currentPage.value] || ''));
+        const pageTitle = computed(() => ({dashboard:'总览', nodes:'节点管理', tasks:'任务中心', data:'数据中心', settings:'系统设置'}[currentPage.value] || ''));
         const nodeList = computed(() => Object.values(nodes));
         const onlineCount = computed(() => nodeList.value.filter(n => n.online).length);
         const activeCount = computed(() => nodeList.value.filter(n => n.online && n.task_status && !['idle','completed','failed','cancelled'].includes(n.task_status)).length);
@@ -584,7 +602,7 @@ const app = createApp({
 
         function onMenuSelect(index) {
             currentPage.value = index;
-            if (index === 'reports') loadReports();
+            if (index === 'data') loadReports();
         }
 
         onMounted(() => { loadNodes(); connectWS(); });
