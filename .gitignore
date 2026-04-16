@@ -22,6 +22,12 @@ reports/
 # Docker
 .dockerignore
 
+# 服务器数据
+server/data/
+
+# Agent 配置（含 token，不应提交）
+agent/agent_config.json
+
 # IDE
 .vscode/
 .idea/

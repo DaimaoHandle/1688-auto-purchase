@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>1688 采购管理系统</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, "Microsoft YaHei", sans-serif; background: #f5f5f5; color: #333; }
+.header { background: #1a1a2e; color: #fff; padding: 16px 24px; display: flex; justify-content: space-between; align-items: center; }
+.header h1 { font-size: 18px; font-weight: 500; }
+.header .stats { font-size: 13px; color: #aaa; }
+.container { max-width: 1200px; margin: 24px auto; padding: 0 16px; }
+.node-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px; }
+.node-card { background: #fff; border-radius: 8px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+.node-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.node-name { font-size: 16px; font-weight: 600; }
+.status-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 6px; }
+.status-dot.online { background: #22c55e; }
+.status-dot.offline { background: #ef4444; }
+.node-info { font-size: 13px; color: #666; line-height: 1.8; }
+.node-info .label { color: #999; }
+.task-status { margin-top: 8px; padding: 8px 12px; background: #f0f9ff; border-radius: 4px; font-size: 13px; }
+.task-status.idle { background: #f5f5f5; }
+.task-status.active { background: #ecfdf5; }
+.task-status.warning { background: #fffbeb; }
+.empty { text-align: center; padding: 60px; color: #999; }
+.empty p { margin-bottom: 16px; }
+.btn { padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; }
+.btn-primary { background: #3b82f6; color: #fff; }
+.btn-primary:hover { background: #2563eb; }
+.add-node { margin-bottom: 16px; text-align: right; }
+.token-display { background: #1a1a2e; color: #22c55e; padding: 12px; border-radius: 4px; font-family: monospace; font-size: 13px; margin-top: 8px; word-break: break-all; }
+</style>
+</head>
+<body>
+<div class="header">
+    <h1>1688 采购管理系统</h1>
+    <div class="stats" id="stats">加载中...</div>
+</div>
+<div class="container">
+    <div class="add-node">
+        <button class="btn btn-primary" onclick="addNode()">+ 添加节点</button>
+    </div>
+    <div class="node-grid" id="nodeGrid"></div>
+</div>
+
+<script>
+const STATUS_LABELS = {
+    idle: '空闲', starting: '启动中', waiting_login: '等待登录',
+    logged_in: '已登录', searching: '搜图中', entering_shop: '进入店铺',
+    filling_cart: '加购中', cart_filled: '加购完成',
+    awaiting_approval: '等待确认结算', checking_out: '结算中',
+    completed: '已完成', failed: '异常', cancelled: '已取消',
+    online: '在线', offline: '离线'
+};
+
+let nodes = {};
+let ws = null;
+
+function connectWS() {
+    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+    ws = new WebSocket(proto + '://' + location.host + '/ws/dashboard');
+    ws.onopen = () => console.log('Dashboard WS 已连接');
+    ws.onclose = () => { console.log('Dashboard WS 断开，3秒后重连'); setTimeout(connectWS, 3000); };
+    ws.onmessage = (e) => {
+        try {
+            const msg = JSON.parse(e.data);
+            handleMessage(msg);
+        } catch(err) { console.error('消息解析失败', err); }
+    };
+}
+
+function handleMessage(msg) {
+    const p = msg.payload || {};
+    const nodeId = p.node_id;
+    if (!nodeId) return;
+
+    if (!nodes[nodeId]) {
+        nodes[nodeId] = { id: nodeId, name: p.name || nodeId, online: false, task_status: null, task_progress: null };
+    }
+
+    if (msg.type === 'status_update') {
+        if (p.status === 'online') { nodes[nodeId].online = true; nodes[nodeId].name = p.name || nodes[nodeId].name; }
+        else if (p.status === 'offline') { nodes[nodeId].online = false; }
+        else { nodes[nodeId].task_status = p.status; }
+    } else if (msg.type === 'progress_update') {
+        nodes[nodeId].task_progress = p;
+        nodes[nodeId].task_status = 'filling_cart';
+    }
+
+    renderNodes();
+}
+
+function renderNodes() {
+    const grid = document.getElementById('nodeGrid');
+    const nodeList = Object.values(nodes);
+
+    if (nodeList.length === 0) {
+        grid.innerHTML = '<div class="empty"><p>暂无节点</p><p>点击右上角"添加节点"生成 Agent 配置</p></div>';
+    } else {
+        grid.innerHTML = nodeList.map(n => {
+            const dotClass = n.online ? 'online' : 'offline';
+            const statusText = n.online ? (STATUS_LABELS[n.task_status] || '空闲') : '离线';
+            let taskClass = 'idle';
+            if (n.task_status === 'awaiting_approval') taskClass = 'warning';
+            else if (n.task_status && n.task_status !== 'idle') taskClass = 'active';
+
+            let progressHtml = '';
+            if (n.task_progress && n.online) {
+                const p = n.task_progress;
+                progressHtml = '<div class="node-info">'
+                    + '<span class="label">已加购:</span> ' + (p.items_added || 0) + ' 件 | '
+                    + '<span class="label">累计:</span> ¥' + (p.local_amount || 0).toFixed(2)
+                    + ' / ¥' + (p.target_amount || 0)
+                    + '</div>';
+            }
+
+            return '<div class="node-card">'
+                + '<div class="node-header">'
+                + '  <span class="node-name"><span class="status-dot ' + dotClass + '"></span>' + (n.name || n.id) + '</span>'
+                + '  <span style="font-size:12px;color:#999">' + n.id + '</span>'
+                + '</div>'
+                + '<div class="task-status ' + taskClass + '">' + statusText + '</div>'
+                + progressHtml
+                + '</div>';
+        }).join('');
+    }
+
+    // 统计
+    const online = nodeList.filter(n => n.online).length;
+    const active = nodeList.filter(n => n.online && n.task_status && n.task_status !== 'idle').length;
+    document.getElementById('stats').textContent =
+        '节点: ' + nodeList.length + ' | 在线: ' + online + ' | 运行中: ' + active;
+}
+
+async function addNode() {
+    const name = prompt('输入节点名称（如：服务器A-张三）：');
+    if (name === null) return;
+
+    try {
+        const res = await fetch('/api/nodes/tokens', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({name: name || ''})
+        });
+        const data = await res.json();
+
+        const configJson = JSON.stringify({
+            server_url: 'ws://' + location.host + '/ws/agent',
+            node_id: data.node_id,
+            token: data.token
+        }, null, 2);
+
+        alert('节点已创建！\\n\\n'
+            + '节点ID: ' + data.node_id + '\\n'
+            + '节点名: ' + data.name + '\\n\\n'
+            + '请在采购服务器上创建 agent/agent_config.json:\\n\\n'
+            + configJson);
+
+        loadNodes();
+    } catch(err) {
+        alert('创建失败: ' + err.message);
+    }
+}
+
+async function loadNodes() {
+    try {
+        const res = await fetch('/api/nodes');
+        const list = await res.json();
+        for (const n of list) {
+            nodes[n.id] = {
+                id: n.id,
+                name: n.name,
+                online: n.online,
+                task_status: n.task_status,
+                task_progress: n.task_progress,
+            };
+        }
+        renderNodes();
+    } catch(err) {
+        console.error('加载节点失败', err);
+    }
+}
+
+// 初始化
+loadNodes();
+connectWS();
+</script>
+</body>
+</html>

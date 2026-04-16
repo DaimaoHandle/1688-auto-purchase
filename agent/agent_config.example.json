@@ -1,0 +1,5 @@
+{
+  "server_url": "ws://管理服务器IP:1688/ws/agent",
+  "node_id": "从管理面板获取",
+  "token": "从管理面板获取"
+}
