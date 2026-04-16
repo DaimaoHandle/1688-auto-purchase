@@ -18,6 +18,7 @@ CONFIG_ITEMS = [
     ("timeouts.login_wait",     "登录等待时间",   "int",   "等待手动登录的超时时间（毫秒）"),
     ("timeouts.element_wait",   "元素等待时间",   "int",   "页面元素出现的超时时间（毫秒）"),
     ("browser.slow_mo",         "操作延迟",       "int",   "每个浏览器操作的延迟（毫秒）"),
+    ("browser.profile_dir",     "浏览器数据目录", "str",   "保存登录态的浏览器 Profile 路径"),
     ("logging.level",           "日志级别",       "str",   "DEBUG / INFO / WARNING / ERROR"),
 ]
 

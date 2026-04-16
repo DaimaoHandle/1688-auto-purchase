@@ -167,6 +167,10 @@ def image_search(context, page, image_path: str):
     from src.login import wait_for_verification
 
     image_path = os.path.expanduser(image_path)
+    # 相对路径基于项目根目录解析
+    if not os.path.isabs(image_path):
+        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        image_path = os.path.join(project_root, image_path)
     if not os.path.exists(image_path):
         raise FileNotFoundError(f"图片文件不存在: {image_path}")
 

@@ -71,7 +71,7 @@ def init_browser(config: dict):
     playwright = sync_playwright().start()
 
     # 持久化 Profile 目录：保留 cookies、localStorage、指纹缓存
-    profile_dir = os.path.expanduser("~/1688/browser_profile")
+    profile_dir = os.path.expanduser(browser_cfg.get("profile_dir", "~/1688/browser_profile"))
     os.makedirs(profile_dir, exist_ok=True)
 
     # 启动参数：关闭自动化特征标记

@@ -2,10 +2,11 @@
   "browser": {
     "type": "chromium",
     "headless": false,
-    "slow_mo": 100
+    "slow_mo": 100,
+    "profile_dir": "~/1688/browser_profile"
   },
   "search": {
-    "image_path": "~/1688/1688-auto-purchase/1.png",
+    "image_path": "./1.png",
     "target_shop_name": "南昌市西湖区振彩贸易行"
   },
   "cart": {

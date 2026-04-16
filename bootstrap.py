@@ -35,7 +35,17 @@ _CHROME_PATHS = [
     "/usr/bin/chromium",
 ]
 
-_PROFILE_DIR = os.path.expanduser("~/1688/browser_profile")
+_CONFIG_PATH = os.path.join(_ROOT, "config.json")
+
+def _load_profile_dir():
+    """从 config.json 读取 profile_dir，未配置则用默认值。"""
+    try:
+        import json
+        with open(_CONFIG_PATH, "r", encoding="utf-8") as f:
+            cfg = json.load(f)
+        return os.path.expanduser(cfg.get("browser", {}).get("profile_dir", "~/1688/browser_profile"))
+    except Exception:
+        return os.path.expanduser("~/1688/browser_profile")
 
 
 def _print(msg: str, level: str = "INFO"):
@@ -143,6 +153,7 @@ def manage_browser_profile():
     print()
     _print("检查浏览器登录态...", "INFO")
 
+    _PROFILE_DIR = _load_profile_dir()
     if not os.path.isdir(_PROFILE_DIR):
         _print("无已保存的登录态", "INFO")
         return
