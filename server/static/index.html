@@ -819,7 +819,7 @@ const app = createApp({
             const p = msg.payload || {};
             const nid = p.node_id;
             if (!nid) return;
-            if (!nodes[nid]) nodes[nid] = {id:nid, name:p.name||nid, online:false, task_status:null, task_progress:null, task_id:null};
+            if (!nodes[nid]) nodes[nid] = {id:nid, name:p.name||nid, remark:'', account_1688:'', remote_ip:'', online:false, task_status:null, task_progress:null, task_id:null, last_heartbeat:null};
             // 只用非空 name 更新（避免 WS 消息中缺 name 时覆盖已有值）
             if (p.name) nodes[nid].name = p.name;
             if (!nodeLogs[nid]) nodeLogs[nid] = [];
@@ -845,7 +845,17 @@ const app = createApp({
             try {
                 const res = await fetch('/api/nodes');
                 const list = await res.json();
-                list.forEach(n => { nodes[n.id] = {id:n.id, name:n.name, online:n.online, task_status:n.task_status, task_progress:n.task_progress, task_id:null}; });
+                // 清空旧数据再填充，确保 Vue 响应式
+                Object.keys(nodes).forEach(k => { if (!list.find(n => n.id === k)) delete nodes[k]; });
+                list.forEach(n => {
+                    nodes[n.id] = {
+                        id: n.id, name: n.name || '', remark: n.remark || '',
+                        account_1688: n.account_1688 || '', remote_ip: n.remote_ip || '',
+                        online: n.online || false, task_status: n.task_status || null,
+                        task_progress: n.task_progress || null, task_id: null,
+                        last_heartbeat: n.last_heartbeat || null,
+                    };
+                });
             } catch(e) {}
         }
 
