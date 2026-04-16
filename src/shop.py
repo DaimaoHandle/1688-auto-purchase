@@ -299,19 +299,56 @@ def _send_message_to_service(context, detail_page):
 
         logger.info(f"点击客服按钮: \"{coord['txt']}\" ({coord['x']:.0f},{coord['y']:.0f})")
 
-        # 点击客服按钮，可能打开新标签页
+        # 点击客服按钮
+        detail_page.mouse.click(coord['x'], coord['y'])
+        detail_page.wait_for_timeout(2000)
+
+        # 检测是否弹出"客户端/网页版"选择提示框，如果弹出则选择网页版
+        try:
+            chose_web = detail_page.evaluate("""() => {
+                var all = document.querySelectorAll('a, button, div, span');
+                for (var i = 0; i < all.length; i++) {
+                    var txt = String(all[i].innerText || '').trim();
+                    if (txt.indexOf('网页版') !== -1 && txt.length < 20) {
+                        var r = all[i].getBoundingClientRect();
+                        if (r.width > 10 && r.height > 10) {
+                            all[i].click();
+                            return true;
+                        }
+                    }
+                }
+                return false;
+            }""")
+            if chose_web:
+                logger.info("检测到客户端/网页版选择框，已选择网页版")
+                detail_page.wait_for_timeout(2000)
+        except Exception:
+            pass
+
+        # 捕获新标签页（客服聊天窗口）
         chat_page = None
         try:
-            with context.expect_page(timeout=8000) as chat_page_info:
-                detail_page.mouse.click(coord['x'], coord['y'])
-            chat_page = chat_page_info.value
-            chat_page.wait_for_load_state("domcontentloaded")
-            chat_page.wait_for_timeout(3000)
-            logger.info(f"客服页面已打开: {chat_page.url}")
+            # 检查是否已有新标签打开
+            pages = context.pages
+            for p in pages:
+                if p != detail_page and ('im.' in p.url or 'ww.' in p.url or 'amos' in p.url or 'chat' in p.url):
+                    chat_page = p
+                    break
+
+            if not chat_page:
+                # 再等一下看有没有新标签
+                with context.expect_page(timeout=5000) as chat_page_info:
+                    pass  # 如果上面选择网页版后会打开新标签
+                chat_page = chat_page_info.value
+
+            if chat_page:
+                chat_page.wait_for_load_state("domcontentloaded")
+                chat_page.wait_for_timeout(3000)
+                logger.info(f"客服页面已打开: {chat_page.url}")
         except Exception:
-            # 没有新标签，可能是弹窗或当前页内嵌
-            logger.warning("客服未在新标签打开，跳过发消息")
-            return
+            if not chat_page:
+                logger.warning("客服未在新标签打开，跳过发消息")
+                return
 
         # 在客服页面找到输入框并发送消息
         try:
