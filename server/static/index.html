@@ -11,26 +11,40 @@ body { font-family: -apple-system, "Microsoft YaHei", sans-serif; background: #f
 .header h1 { font-size: 18px; font-weight: 500; }
 .header .stats { font-size: 13px; color: #aaa; }
 .container { max-width: 1200px; margin: 24px auto; padding: 0 16px; }
-.node-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px; }
+.node-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 16px; }
 .node-card { background: #fff; border-radius: 8px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
 .node-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
 .node-name { font-size: 16px; font-weight: 600; }
 .status-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 6px; }
 .status-dot.online { background: #22c55e; }
 .status-dot.offline { background: #ef4444; }
-.node-info { font-size: 13px; color: #666; line-height: 1.8; }
+.node-info { font-size: 13px; color: #666; line-height: 1.8; margin-top: 6px; }
 .node-info .label { color: #999; }
-.task-status { margin-top: 8px; padding: 8px 12px; background: #f0f9ff; border-radius: 4px; font-size: 13px; }
+.task-status { margin-top: 8px; padding: 8px 12px; border-radius: 4px; font-size: 13px; }
 .task-status.idle { background: #f5f5f5; }
-.task-status.active { background: #ecfdf5; }
-.task-status.warning { background: #fffbeb; }
+.task-status.active { background: #ecfdf5; color: #166534; }
+.task-status.warning { background: #fffbeb; color: #92400e; }
+.task-status.error { background: #fef2f2; color: #991b1b; }
 .empty { text-align: center; padding: 60px; color: #999; }
-.empty p { margin-bottom: 16px; }
-.btn { padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; }
+.btn { padding: 6px 14px; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; margin: 2px; }
 .btn-primary { background: #3b82f6; color: #fff; }
 .btn-primary:hover { background: #2563eb; }
+.btn-success { background: #22c55e; color: #fff; }
+.btn-success:hover { background: #16a34a; }
+.btn-danger { background: #ef4444; color: #fff; }
+.btn-danger:hover { background: #dc2626; }
+.btn-warning { background: #f59e0b; color: #fff; }
+.btn-warning:hover { background: #d97706; }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.actions { margin-top: 10px; display: flex; gap: 4px; flex-wrap: wrap; }
 .add-node { margin-bottom: 16px; text-align: right; }
-.token-display { background: #1a1a2e; color: #22c55e; padding: 12px; border-radius: 4px; font-family: monospace; font-size: 13px; margin-top: 8px; word-break: break-all; }
+.log-panel { margin-top: 10px; max-height: 200px; overflow-y: auto; background: #1a1a2e; color: #ddd; border-radius: 4px; padding: 8px; font-family: monospace; font-size: 11px; line-height: 1.6; display: none; }
+.log-panel.show { display: block; }
+.log-entry.WARNING { color: #fbbf24; }
+.log-entry.ERROR { color: #f87171; }
+.log-entry.INFO { color: #a5b4fc; }
+.progress-bar { margin-top: 8px; height: 6px; background: #e5e7eb; border-radius: 3px; overflow: hidden; }
+.progress-fill { height: 100%; background: #3b82f6; transition: width 0.3s; border-radius: 3px; }
 </style>
 </head>
 <body>
@@ -56,18 +70,16 @@ const STATUS_LABELS = {
 };
 
 let nodes = {};
+let nodeLogs = {};
 let ws = null;
 
 function connectWS() {
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
     ws = new WebSocket(proto + '://' + location.host + '/ws/dashboard');
-    ws.onopen = () => console.log('Dashboard WS 已连接');
-    ws.onclose = () => { console.log('Dashboard WS 断开，3秒后重连'); setTimeout(connectWS, 3000); };
+    ws.onopen = () => console.log('Dashboard WS connected');
+    ws.onclose = () => setTimeout(connectWS, 3000);
     ws.onmessage = (e) => {
-        try {
-            const msg = JSON.parse(e.data);
-            handleMessage(msg);
-        } catch(err) { console.error('消息解析失败', err); }
+        try { handleMessage(JSON.parse(e.data)); } catch(err) {}
     };
 }
 
@@ -77,16 +89,29 @@ function handleMessage(msg) {
     if (!nodeId) return;
 
     if (!nodes[nodeId]) {
-        nodes[nodeId] = { id: nodeId, name: p.name || nodeId, online: false, task_status: null, task_progress: null };
+        nodes[nodeId] = { id: nodeId, name: p.name || nodeId, online: false, task_status: null, task_progress: null, task_id: null };
     }
+    if (!nodeLogs[nodeId]) nodeLogs[nodeId] = [];
 
     if (msg.type === 'status_update') {
         if (p.status === 'online') { nodes[nodeId].online = true; nodes[nodeId].name = p.name || nodes[nodeId].name; }
-        else if (p.status === 'offline') { nodes[nodeId].online = false; }
-        else { nodes[nodeId].task_status = p.status; }
+        else if (p.status === 'offline') { nodes[nodeId].online = false; nodes[nodeId].task_status = null; }
+        else {
+            nodes[nodeId].task_status = p.status;
+            if (p.task_id) nodes[nodeId].task_id = p.task_id;
+        }
     } else if (msg.type === 'progress_update') {
         nodes[nodeId].task_progress = p;
         nodes[nodeId].task_status = 'filling_cart';
+        if (p.task_id) nodes[nodeId].task_id = p.task_id;
+    } else if (msg.type === 'log_entry') {
+        const logs = nodeLogs[nodeId];
+        logs.push(p);
+        if (logs.length > 200) logs.splice(0, logs.length - 200);
+        updateLogPanel(nodeId);
+        return; // don't re-render cards for every log
+    } else if (msg.type === 'task_report') {
+        nodes[nodeId].task_status = 'completed';
     }
 
     renderNodes();
@@ -97,47 +122,132 @@ function renderNodes() {
     const nodeList = Object.values(nodes);
 
     if (nodeList.length === 0) {
-        grid.innerHTML = '<div class="empty"><p>暂无节点</p><p>点击右上角"添加节点"生成 Agent 配置</p></div>';
-    } else {
-        grid.innerHTML = nodeList.map(n => {
-            const dotClass = n.online ? 'online' : 'offline';
-            const statusText = n.online ? (STATUS_LABELS[n.task_status] || '空闲') : '离线';
-            let taskClass = 'idle';
-            if (n.task_status === 'awaiting_approval') taskClass = 'warning';
-            else if (n.task_status && n.task_status !== 'idle') taskClass = 'active';
-
-            let progressHtml = '';
-            if (n.task_progress && n.online) {
-                const p = n.task_progress;
-                progressHtml = '<div class="node-info">'
-                    + '<span class="label">已加购:</span> ' + (p.items_added || 0) + ' 件 | '
-                    + '<span class="label">累计:</span> ¥' + (p.local_amount || 0).toFixed(2)
-                    + ' / ¥' + (p.target_amount || 0)
-                    + '</div>';
-            }
-
-            return '<div class="node-card">'
-                + '<div class="node-header">'
-                + '  <span class="node-name"><span class="status-dot ' + dotClass + '"></span>' + (n.name || n.id) + '</span>'
-                + '  <span style="font-size:12px;color:#999">' + n.id + '</span>'
-                + '</div>'
-                + '<div class="task-status ' + taskClass + '">' + statusText + '</div>'
-                + progressHtml
-                + '</div>';
-        }).join('');
+        grid.innerHTML = '<div class="empty"><p>暂无节点</p><p>点击"添加节点"生成 Agent 配置</p></div>';
+        updateStats(nodeList);
+        return;
     }
 
-    // 统计
+    grid.innerHTML = nodeList.map(n => {
+        const dotClass = n.online ? 'online' : 'offline';
+        const st = n.task_status;
+        const statusText = n.online ? (STATUS_LABELS[st] || '空闲') : '离线';
+        let taskClass = 'idle';
+        if (st === 'awaiting_approval') taskClass = 'warning';
+        else if (st === 'failed') taskClass = 'error';
+        else if (st && st !== 'idle' && st !== 'completed' && st !== 'cancelled') taskClass = 'active';
+
+        let progressHtml = '';
+        if (n.task_progress && n.online && st === 'filling_cart') {
+            const p = n.task_progress;
+            const pct = p.target_amount > 0 ? Math.min(100, (p.local_amount / p.target_amount) * 100) : 0;
+            progressHtml = '<div class="node-info">'
+                + '<span class="label">已加购:</span> ' + (p.items_added || 0) + ' 件 | '
+                + '<span class="label">累计:</span> ¥' + (p.local_amount || 0).toFixed(2)
+                + ' / ¥' + (p.target_amount || 0)
+                + '</div>'
+                + '<div class="progress-bar"><div class="progress-fill" style="width:' + pct.toFixed(1) + '%"></div></div>';
+        }
+
+        // 操作按钮
+        let actionsHtml = '<div class="actions">';
+        if (!n.online) {
+            actionsHtml += '<span style="font-size:12px;color:#999">节点离线</span>';
+        } else if (!st || st === 'idle' || st === 'completed' || st === 'failed' || st === 'cancelled') {
+            actionsHtml += '<button class="btn btn-success" onclick="startTask(\'' + n.id + '\')">启动任务</button>';
+        } else if (st === 'awaiting_approval') {
+            actionsHtml += '<button class="btn btn-success" onclick="approveCheckout(\'' + n.task_id + '\')">确认结算</button>';
+            actionsHtml += '<button class="btn btn-danger" onclick="rejectCheckout(\'' + n.task_id + '\')">取消结算</button>';
+        } else {
+            actionsHtml += '<button class="btn btn-danger" onclick="stopTask(\'' + n.id + '\')">停止</button>';
+        }
+        actionsHtml += '<button class="btn" onclick="toggleLog(\'' + n.id + '\')">日志</button>';
+        actionsHtml += '</div>';
+
+        return '<div class="node-card" id="card-' + n.id + '">'
+            + '<div class="node-header">'
+            + '  <span class="node-name"><span class="status-dot ' + dotClass + '"></span>' + (n.name || n.id) + '</span>'
+            + '  <span style="font-size:12px;color:#999">' + n.id + '</span>'
+            + '</div>'
+            + '<div class="task-status ' + taskClass + '">' + statusText + '</div>'
+            + progressHtml
+            + actionsHtml
+            + '<div class="log-panel" id="log-' + n.id + '"></div>'
+            + '</div>';
+    }).join('');
+
+    // 恢复日志面板状态
+    for (const nid in nodeLogs) {
+        const panel = document.getElementById('log-' + nid);
+        if (panel && panel.classList.contains('show')) updateLogPanel(nid);
+    }
+
+    updateStats(nodeList);
+}
+
+function updateStats(nodeList) {
     const online = nodeList.filter(n => n.online).length;
-    const active = nodeList.filter(n => n.online && n.task_status && n.task_status !== 'idle').length;
+    const active = nodeList.filter(n => n.online && n.task_status && !['idle','completed','failed','cancelled'].includes(n.task_status)).length;
     document.getElementById('stats').textContent =
         '节点: ' + nodeList.length + ' | 在线: ' + online + ' | 运行中: ' + active;
+}
+
+function updateLogPanel(nodeId) {
+    const panel = document.getElementById('log-' + nodeId);
+    if (!panel || !panel.classList.contains('show')) return;
+    const logs = nodeLogs[nodeId] || [];
+    panel.innerHTML = logs.slice(-100).map(l =>
+        '<div class="log-entry ' + (l.level || '') + '">' + (l.message || '') + '</div>'
+    ).join('');
+    panel.scrollTop = panel.scrollHeight;
+}
+
+function toggleLog(nodeId) {
+    const panel = document.getElementById('log-' + nodeId);
+    if (!panel) return;
+    panel.classList.toggle('show');
+    if (panel.classList.contains('show')) updateLogPanel(nodeId);
+}
+
+async function startTask(nodeId) {
+    // 简单启动：使用服务器存储的配置（后续阶段实现配置管理）
+    // 目前用空 config，Agent 会用本地 config.json
+    try {
+        const res = await fetch('/api/tasks/nodes/' + nodeId + '/start', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({config: {}})
+        });
+        const data = await res.json();
+        if (res.ok) {
+            console.log('任务已启动:', data.task_id);
+        } else {
+            alert('启动失败: ' + (data.detail || JSON.stringify(data)));
+        }
+    } catch(err) { alert('请求失败: ' + err.message); }
+}
+
+async function stopTask(nodeId) {
+    if (!confirm('确认停止任务？')) return;
+    try {
+        await fetch('/api/tasks/nodes/' + nodeId + '/stop', { method: 'POST' });
+    } catch(err) { alert('请求失败: ' + err.message); }
+}
+
+async function approveCheckout(taskId) {
+    try {
+        await fetch('/api/tasks/' + taskId + '/approve', { method: 'POST' });
+    } catch(err) { alert('请求失败: ' + err.message); }
+}
+
+async function rejectCheckout(taskId) {
+    try {
+        await fetch('/api/tasks/' + taskId + '/reject', { method: 'POST' });
+    } catch(err) { alert('请求失败: ' + err.message); }
 }
 
 async function addNode() {
     const name = prompt('输入节点名称（如：服务器A-张三）：');
     if (name === null) return;
-
     try {
         const res = await fetch('/api/nodes/tokens', {
             method: 'POST',
@@ -145,23 +255,15 @@ async function addNode() {
             body: JSON.stringify({name: name || ''})
         });
         const data = await res.json();
-
         const configJson = JSON.stringify({
             server_url: 'ws://' + location.host + '/ws/agent',
             node_id: data.node_id,
             token: data.token
         }, null, 2);
-
-        alert('节点已创建！\\n\\n'
-            + '节点ID: ' + data.node_id + '\\n'
-            + '节点名: ' + data.name + '\\n\\n'
-            + '请在采购服务器上创建 agent/agent_config.json:\\n\\n'
-            + configJson);
-
+        alert('节点已创建！\n\n节点ID: ' + data.node_id + '\n节点名: ' + data.name
+            + '\n\n请在采购服务器的 agent/agent_config.json 中填入:\n\n' + configJson);
         loadNodes();
-    } catch(err) {
-        alert('创建失败: ' + err.message);
-    }
+    } catch(err) { alert('创建失败: ' + err.message); }
 }
 
 async function loadNodes() {
@@ -169,21 +271,12 @@ async function loadNodes() {
         const res = await fetch('/api/nodes');
         const list = await res.json();
         for (const n of list) {
-            nodes[n.id] = {
-                id: n.id,
-                name: n.name,
-                online: n.online,
-                task_status: n.task_status,
-                task_progress: n.task_progress,
-            };
+            nodes[n.id] = { id: n.id, name: n.name, online: n.online, task_status: n.task_status, task_progress: n.task_progress, task_id: null };
         }
         renderNodes();
-    } catch(err) {
-        console.error('加载节点失败', err);
-    }
+    } catch(err) { console.error('加载节点失败', err); }
 }
 
-// 初始化
 loadNodes();
 connectWS();
 </script>

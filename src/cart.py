@@ -707,7 +707,7 @@ def add_item_to_cart(context, item_el, shop_page=None) -> float:
                     pass
 
 
-def run_cart_filling(context, shop_page, cart_config: dict):
+def run_cart_filling(context, shop_page, cart_config: dict, progress_callback=None):
     """
     主循环：遍历全店商品，逐个打开详情页加入采购车，直到达到目标金额。
 
@@ -783,6 +783,11 @@ def run_cart_filling(context, shop_page, cart_config: dict):
                 breaker.record_success()
                 logger.info(f"[{added_count}] 已加入采购车 | 商品价格: ¥{item_price:.2f} | 本地累计: ¥{local_amount:.2f} / ¥{target}")
                 print(f"  已加入 {added_count} 件 | 商品价格: ¥{item_price:.2f} | 累计: ¥{local_amount:.2f} / 目标: ¥{target}")
+                if progress_callback:
+                    try:
+                        progress_callback(added_count, item_price, local_amount, target, page_num)
+                    except Exception:
+                        pass
             else:
                 breaker.record_failure()
                 if breaker.level >= 1:
