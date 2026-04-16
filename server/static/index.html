@@ -413,10 +413,12 @@ const app = createApp({
             const nid = p.node_id;
             if (!nid) return;
             if (!nodes[nid]) nodes[nid] = {id:nid, name:p.name||nid, online:false, task_status:null, task_progress:null, task_id:null};
+            // 只用非空 name 更新（避免 WS 消息中缺 name 时覆盖已有值）
+            if (p.name) nodes[nid].name = p.name;
             if (!nodeLogs[nid]) nodeLogs[nid] = [];
 
             if (msg.type === 'status_update') {
-                if (p.status === 'online') { nodes[nid].online = true; if (p.name) nodes[nid].name = p.name; }
+                if (p.status === 'online') { nodes[nid].online = true; }
                 else if (p.status === 'offline') { nodes[nid].online = false; nodes[nid].task_status = null; }
                 else { nodes[nid].task_status = p.status; if (p.task_id) nodes[nid].task_id = p.task_id; }
             } else if (msg.type === 'progress_update') {
