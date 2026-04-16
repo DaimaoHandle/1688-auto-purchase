@@ -208,6 +208,7 @@ class PurchaseWorker:
             added = run_cart_filling(
                 context, shop_page, config.get("cart", {}),
                 progress_callback=self._send_progress,
+                cancel_check=self._is_cancelled,
             )
 
             self._send_status(STATUS_CART_FILLED, f"加购完成，共 {added} 件商品")

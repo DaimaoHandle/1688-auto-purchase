@@ -707,7 +707,7 @@ def add_item_to_cart(context, item_el, shop_page=None) -> float:
                     pass
 
 
-def run_cart_filling(context, shop_page, cart_config: dict, progress_callback=None):
+def run_cart_filling(context, shop_page, cart_config: dict, progress_callback=None, cancel_check=None):
     """
     主循环：遍历全店商品，逐个打开详情页加入采购车，直到达到目标金额。
 
@@ -731,6 +731,11 @@ def run_cart_filling(context, shop_page, cart_config: dict, progress_callback=No
     breaker = CircuitBreaker(threshold=5)
 
     while added_count < max_items:
+        # 检查取消
+        if cancel_check and cancel_check():
+            logger.info("收到取消指令，停止加购")
+            break
+
         # 检查熔断器
         if breaker.should_abort():
             logger.error(f"[熔断] 连续失败 {breaker.consecutive_failures} 次，中止加购")
@@ -749,6 +754,11 @@ def run_cart_filling(context, shop_page, cart_config: dict, progress_callback=No
         logger.info(f"第{page_num}页共 {len(items)} 个商品")
 
         for item_el in items:
+            # 检查取消
+            if cancel_check and cancel_check():
+                logger.info("收到取消指令，停止加购")
+                return added_count
+
             if added_count >= max_items:
                 logger.info(f"已达最大商品数 {max_items}，停止")
                 return added_count
