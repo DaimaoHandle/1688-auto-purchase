@@ -608,39 +608,43 @@ def enter_new_product_zone(shop_page) -> bool:
 def select_today_new_products(shop_page) -> bool:
     """
     在新品专区中选择今日上新日期。
+    左侧日期列表格式为 "X月X日"（如 "4月16日"），需精确匹配。
     返回是否成功选择。
     """
     from datetime import datetime
-    today_str = datetime.now().strftime("%m-%d")  # 如 "04-16"
-    today_str2 = datetime.now().strftime("%-m-%-d")  # 如 "4-16"（无前导零）
-    today_str3 = datetime.now().strftime("%m月%d日")  # 如 "04月16日"
-    today_day = datetime.now().strftime("%-d")  # 如 "16"
+    now = datetime.now()
+    # 生成匹配格式："4月16日"
+    today_date = f"{now.month}月{now.day}日"
 
     try:
-        result = shop_page.evaluate("""(params) => {
-            var candidates = params.dates;
+        result = shop_page.evaluate("""(todayDate) => {
             var all = document.querySelectorAll('a, div, span, li, button');
-            // 先找精确匹配今天日期的元素
+            // 精确匹配 "X月X日" 格式的日期文字
             for (var i = 0; i < all.length; i++) {
-                var txt = String(all[i].innerText || '').trim();
-                for (var d = 0; d < candidates.length; d++) {
-                    if (txt.indexOf(candidates[d]) !== -1 && txt.length < 20) {
-                        var r = all[i].getBoundingClientRect();
-                        if (r.width > 5 && r.height > 5) {
-                            all[i].click();
-                            return {clicked: true, txt: txt, match: candidates[d]};
-                        }
+                var el = all[i];
+                var txt = String(el.innerText || '').trim();
+                // 精确匹配：文字就是日期，或文字以日期开头（如 "4月16日 上新"）
+                if (txt === todayDate || txt.indexOf(todayDate) === 0) {
+                    var r = el.getBoundingClientRect();
+                    if (r.width > 5 && r.height > 5) {
+                        el.click();
+                        return {clicked: true, txt: txt, match: todayDate};
                     }
                 }
             }
-            // 兜底：点击日期列表中的第一个（通常是最新的）
-            var dateItems = document.querySelectorAll('[class*="date"] li, [class*="date"] a, [class*="Date"] div');
-            if (dateItems.length > 0) {
-                dateItems[0].click();
-                return {clicked: true, txt: dateItems[0].innerText, match: 'first-item'};
+            // 兜底：点击左侧日期列表第一个含"月"和"日"的元素（通常是最新日期）
+            for (var j = 0; j < all.length; j++) {
+                var txt2 = String(all[j].innerText || '').trim();
+                if (txt2.indexOf('月') !== -1 && txt2.indexOf('日') !== -1 && txt2.length < 10) {
+                    var r2 = all[j].getBoundingClientRect();
+                    if (r2.width > 5 && r2.height > 5) {
+                        all[j].click();
+                        return {clicked: true, txt: txt2, match: 'first-date'};
+                    }
+                }
             }
             return {clicked: false};
-        }""", {"dates": [today_str, today_str2, today_str3, today_day]})
+        }""", today_date)
 
         if result and result.get('clicked'):
             shop_page.wait_for_timeout(3000)

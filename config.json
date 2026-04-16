@@ -12,6 +12,7 @@
   "cart": {
     "target_amount": 2000,
     "amount_strategy": "not_exceed",
+    "purchase_mode": "new_product",
     "max_items": 200,
     "order_limit": 500,
     "shipping_reserve": 15
