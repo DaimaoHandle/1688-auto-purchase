@@ -391,7 +391,7 @@ def _send_message_to_service(context, detail_page):
                 chat_page.wait_for_timeout(2000)
 
             if chat_frame:
-                # 用 Playwright frame.click() 点击输入框（自动处理 iframe 坐标偏移）
+                # 1. 点击输入框激活
                 try:
                     chat_frame.click('pre.edit[contenteditable="true"]', timeout=3000)
                 except Exception:
@@ -399,37 +399,20 @@ def _send_message_to_service(context, detail_page):
                         chat_frame.click('[contenteditable="true"]', timeout=3000)
                     except Exception:
                         logger.warning("点击输入框失败")
-
                 chat_page.wait_for_timeout(500)
 
-                # 用 Playwright keyboard 输入（作用于当前焦点元素）
-                chat_page.keyboard.type("今天能发货吗")
+                # 2. 全选清空（防止残留内容），再输入消息
+                chat_page.keyboard.press("Control+a")
+                chat_page.wait_for_timeout(200)
+                chat_page.keyboard.press("Backspace")
+                chat_page.wait_for_timeout(200)
+                chat_page.keyboard.type("今天能发货吗", delay=50)
                 chat_page.wait_for_timeout(500)
+                logger.info("已输入消息文字")
 
-                # 用 frame.click() 点击发送按钮
-                try:
-                    # 找包含"发送"文字且可见的按钮
-                    send_clicked = chat_frame.evaluate("""() => {
-                        var all = document.querySelectorAll('button, a, div, span');
-                        for (var i = 0; i < all.length; i++) {
-                            var txt = String(all[i].innerText || '').trim();
-                            if (txt.indexOf('发送') !== -1 && txt.length < 10) {
-                                var r = all[i].getBoundingClientRect();
-                                if (r.width > 20 && r.height > 15) {
-                                    all[i].click();
-                                    return true;
-                                }
-                            }
-                        }
-                        return false;
-                    }""")
-                    if not send_clicked:
-                        # 按 Enter 发送
-                        chat_page.keyboard.press("Enter")
-                except Exception:
-                    chat_page.keyboard.press("Enter")
-
-                chat_page.wait_for_timeout(1000)
+                # 3. 按 Enter 发送（客服页面支持 Enter 发送）
+                chat_page.keyboard.press("Enter")
+                chat_page.wait_for_timeout(1500)
                 sent = True
                 logger.info("已发送消息: 今天能发货吗")
             else:
