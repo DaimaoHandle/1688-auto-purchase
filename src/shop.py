@@ -350,59 +350,83 @@ def _send_message_to_service(context, detail_page):
                 logger.warning("客服未在新标签打开，跳过发消息")
                 return
 
-        # 在客服页面找到输入框并发送消息（等待页面渲染，最多 15 秒）
+        # 客服聊天在 iframe 内，需要先找到 iframe 再操作
         try:
-            sent = None
+            # 等待 iframe 加载，最多 15 秒
+            chat_frame = None
             for _wait in range(8):
-                sent = chat_page.evaluate("""() => {
-                    var inputs = document.querySelectorAll('textarea, [contenteditable="true"], input[type="text"]');
-                    for (var i = 0; i < inputs.length; i++) {
-                        var el = inputs[i];
-                        var r = el.getBoundingClientRect();
-                        if (r.width > 100 && r.height > 20) {
-                            el.focus();
-                            if (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT') {
-                                el.value = '今天能发货吗';
-                                el.dispatchEvent(new Event('input', {bubbles: true}));
-                            } else {
-                                el.innerText = '今天能发货吗';
-                                el.dispatchEvent(new Event('input', {bubbles: true}));
-                            }
-                            return {found: true, tag: el.tagName};
-                        }
-                    }
-                    return {found: false};
-                }""")
-                if sent and sent.get('found'):
+                frames = chat_page.frames
+                for f in frames:
+                    if 'air.1688.com' in f.url or 'im' in f.url:
+                        chat_frame = f
+                        break
+                if chat_frame:
                     break
                 chat_page.wait_for_timeout(2000)
 
-            if sent and sent.get('found'):
-                chat_page.wait_for_timeout(500)
-                # 找发送按钮并点击
-                send_result = chat_page.evaluate("""() => {
-                    var btns = document.querySelectorAll('button, a, div, span');
-                    for (var i = 0; i < btns.length; i++) {
-                        var txt = String(btns[i].innerText || '').trim();
-                        if (txt === '发送' || txt === 'Send') {
-                            var r = btns[i].getBoundingClientRect();
-                            if (r.width > 10 && r.height > 10) {
-                                btns[i].click();
+            if not chat_frame:
+                logger.warning("未找到客服聊天 iframe")
+            else:
+                logger.info(f"找到客服 iframe: {chat_frame.url[:60]}")
+
+                # 在 iframe 内等待输入框出现，最多 15 秒
+                sent = False
+                for _wait2 in range(8):
+                    found = chat_frame.evaluate("""() => {
+                        var inputs = document.querySelectorAll(
+                            'textarea, [contenteditable="true"], [role="textbox"], input[type="text"]'
+                        );
+                        for (var i = 0; i < inputs.length; i++) {
+                            var el = inputs[i];
+                            var r = el.getBoundingClientRect();
+                            if (r.width > 50 && r.height > 15) {
+                                el.focus();
+                                if (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT') {
+                                    el.value = '今天能发货吗';
+                                    el.dispatchEvent(new Event('input', {bubbles: true}));
+                                } else {
+                                    el.innerText = '今天能发货吗';
+                                    el.dispatchEvent(new Event('input', {bubbles: true}));
+                                }
                                 return true;
                             }
                         }
-                    }
-                    return false;
-                }""")
+                        return false;
+                    }""")
+                    if found:
+                        sent = True
+                        break
+                    chat_frame.wait_for_timeout(2000)
 
-                if not send_result:
-                    # 尝试按 Enter 发送
-                    chat_page.keyboard.press("Enter")
-
-                chat_page.wait_for_timeout(1000)
-                logger.info("已发送消息: 今天能发货吗")
-            else:
-                logger.warning("未找到客服输入框")
+                if sent:
+                    chat_frame.wait_for_timeout(500)
+                    # 在 iframe 内找发送按钮
+                    send_ok = chat_frame.evaluate("""() => {
+                        var all = document.querySelectorAll('button, a, div, span');
+                        for (var i = 0; i < all.length; i++) {
+                            var txt = String(all[i].innerText || '').trim();
+                            if (txt === '发送' || txt === 'Send') {
+                                var r = all[i].getBoundingClientRect();
+                                if (r.width > 10 && r.height > 10) {
+                                    all[i].click();
+                                    return true;
+                                }
+                            }
+                        }
+                        return false;
+                    }""")
+                    if not send_ok:
+                        # 尝试 Enter 发送
+                        chat_frame.evaluate("""() => {
+                            var el = document.activeElement;
+                            if (el) {
+                                el.dispatchEvent(new KeyboardEvent('keydown', {key:'Enter',keyCode:13,bubbles:true}));
+                            }
+                        }""")
+                    chat_page.wait_for_timeout(1000)
+                    logger.info("已发送消息: 今天能发货吗")
+                else:
+                    logger.warning("iframe 内未找到客服输入框")
         except Exception as e:
             logger.warning(f"发送消息失败: {e}")
 
