@@ -299,11 +299,11 @@ html, body, #app { height: 100%; margin: 0; }
                         <el-table-column prop="orders_created" label="订单笔数" min-width="70" align="center" />
                         <el-table-column label="采购金额" min-width="90" align="right">
                             <template #default="{row}">
-                                <span style="color:#e6a23c;font-weight:600">{{ row.actual_amount ? '\u00a5' + row.actual_amount.toFixed(2) : '-' }}</span>
+                                <span style="color:#e6a23c;font-weight:600">{{ row.actual_amount ? '¥' + row.actual_amount.toFixed(2) : '-' }}</span>
                             </template>
                         </el-table-column>
                         <el-table-column label="计划金额" min-width="90" align="right">
-                            <template #default="{row}">\u00a5{{ (row.target_amount || 0).toFixed(2) }}</template>
+                            <template #default="{row}">¥{{ (row.target_amount || 0).toFixed(2) }}</template>
                         </el-table-column>
                         <el-table-column prop="items_added" label="加购数" min-width="60" align="center" />
                         <el-table-column label="状态" min-width="60" align="center">
@@ -324,7 +324,7 @@ html, body, #app { height: 100%; margin: 0; }
 <!-- 添加节点弹窗 -->
 <el-dialog v-model="showAddNode" title="添加节点" width="520px">
     <el-form label-width="100px">
-        <el-divider content-position="left">基本信息</el-divider>
+        <div style="font-size:13px;color:#909399;margin-bottom:12px;border-bottom:1px solid #eee;padding-bottom:6px">基本信息</div>
         <el-form-item label="节点名称">
             <el-input v-model="newNode.name" placeholder="如：服务器A-张三" />
         </el-form-item>
@@ -334,7 +334,7 @@ html, body, #app { height: 100%; margin: 0; }
         <el-form-item label="1688账号">
             <el-input v-model="newNode.account_1688" placeholder="绑定的1688账号" />
         </el-form-item>
-        <el-divider content-position="left">买手信息（用于数据统计）</el-divider>
+        <div style="font-size:13px;color:#909399;margin:16px 0 12px;border-bottom:1px solid #eee;padding-bottom:6px">买手信息（用于数据统计）</div>
         <el-form-item label="买手姓名">
             <el-input v-model="newNode.buyer_name" placeholder="" />
         </el-form-item>
