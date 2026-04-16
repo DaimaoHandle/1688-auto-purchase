@@ -755,25 +755,28 @@ def _fill_cart_from_current_page(context, shop_page, cart_config, added_count, l
 
         logger.info(f"{prefix}第{page_num}页共 {len(items)} 个商品")
 
-        # 优先采购无销量商品：检查卡片内是否有 [title="累计销量"] 或含"已售"的元素
+        # 优先采购无销量商品：从img往上找到卡片最外层（230px宽），在卡片内查找销量标记
         sales_flags = []
         for item_el in items:
             try:
                 has = shop_page.evaluate("""(img) => {
-                    // 从 img 往上找卡片容器（最多10层），在容器内搜索销量标记
-                    var node = img;
+                    // 从img往上找到商品卡片容器（宽度约230px的div）
+                    var card = img;
                     for (var j = 0; j < 10; j++) {
-                        node = node.parentElement;
-                        if (!node) return false;
-                        // 检查容器内是否有 title="累计销量" 的元素
-                        var salesEl = node.querySelector('[title="累计销量"]');
-                        if (salesEl) return true;
-                        // 也检查文本包含"已售"
-                        var spans = node.querySelectorAll('span');
-                        for (var k = 0; k < spans.length; k++) {
-                            var t = (spans[k].innerText || '').trim();
-                            if (t.indexOf('已售') !== -1 && t.length < 20) return true;
-                        }
+                        if (!card.parentElement) break;
+                        card = card.parentElement;
+                        // 卡片容器特征：宽度200-260px，含img和价格
+                        var r = card.getBoundingClientRect();
+                        if (r.width >= 200 && r.width <= 280) break;
+                    }
+                    // 在整个卡片内查找销量标记
+                    var salesEl = card.querySelector('[title="累计销量"]');
+                    if (salesEl) return true;
+                    // 兜底：找含"已售"的span
+                    var spans = card.querySelectorAll('span');
+                    for (var k = 0; k < spans.length; k++) {
+                        var t = (spans[k].innerText || '').trim();
+                        if (t.indexOf('已售') !== -1 && t.length < 20) return true;
                     }
                     return false;
                 }""", item_el)
