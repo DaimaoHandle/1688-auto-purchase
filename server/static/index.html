@@ -4,434 +4,494 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>1688 采购管理系统</title>
+<link rel="stylesheet" href="https://unpkg.com/element-plus/dist/index.css">
+<script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+<script src="https://unpkg.com/element-plus"></script>
+<script src="https://unpkg.com/@element-plus/icons-vue"></script>
 <style>
-* { margin: 0; padding: 0; box-sizing: border-box; }
-body { font-family: -apple-system, "Microsoft YaHei", sans-serif; background: #f5f5f5; color: #333; }
-.header { background: #1a1a2e; color: #fff; padding: 16px 24px; display: flex; justify-content: space-between; align-items: center; }
-.header h1 { font-size: 18px; font-weight: 500; }
-.header .stats { font-size: 13px; color: #aaa; }
-.container { max-width: 1200px; margin: 24px auto; padding: 0 16px; }
-.node-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 16px; }
-.node-card { background: #fff; border-radius: 8px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-.node-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
-.node-name { font-size: 16px; font-weight: 600; }
-.status-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 6px; }
-.status-dot.online { background: #22c55e; }
-.status-dot.offline { background: #ef4444; }
-.node-info { font-size: 13px; color: #666; line-height: 1.8; margin-top: 6px; }
-.node-info .label { color: #999; }
-.task-status { margin-top: 8px; padding: 8px 12px; border-radius: 4px; font-size: 13px; }
-.task-status.idle { background: #f5f5f5; }
-.task-status.active { background: #ecfdf5; color: #166534; }
-.task-status.warning { background: #fffbeb; color: #92400e; }
-.task-status.error { background: #fef2f2; color: #991b1b; }
-.empty { text-align: center; padding: 60px; color: #999; }
-.btn { padding: 6px 14px; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; margin: 2px; }
-.btn-primary { background: #3b82f6; color: #fff; }
-.btn-primary:hover { background: #2563eb; }
-.btn-success { background: #22c55e; color: #fff; }
-.btn-success:hover { background: #16a34a; }
-.btn-danger { background: #ef4444; color: #fff; }
-.btn-danger:hover { background: #dc2626; }
-.btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.actions { margin-top: 10px; display: flex; gap: 4px; flex-wrap: wrap; }
-.add-node { margin-bottom: 16px; text-align: right; }
-.log-panel { margin-top: 10px; max-height: 200px; overflow-y: auto; background: #1a1a2e; color: #ddd; border-radius: 4px; padding: 8px; font-family: monospace; font-size: 11px; line-height: 1.6; display: none; }
-.log-panel.show { display: block; }
-.log-entry.WARNING { color: #fbbf24; }
-.log-entry.ERROR { color: #f87171; }
-.log-entry.INFO { color: #a5b4fc; }
-.progress-bar { margin-top: 8px; height: 6px; background: #e5e7eb; border-radius: 3px; overflow: hidden; }
-.progress-fill { height: 100%; background: #3b82f6; transition: width 0.3s; border-radius: 3px; }
-/* Modal */
-.modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 100; justify-content: center; align-items: center; }
-.modal-overlay.show { display: flex; }
-.modal { background: #fff; border-radius: 8px; padding: 24px; width: 500px; max-height: 80vh; overflow-y: auto; }
-.modal h2 { font-size: 16px; margin-bottom: 16px; }
-.form-group { margin-bottom: 12px; }
-.form-group label { display: block; font-size: 13px; color: #666; margin-bottom: 4px; }
-.form-group input, .form-group select { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px; }
-.form-group .hint { font-size: 11px; color: #999; margin-top: 2px; }
-.form-actions { margin-top: 16px; display: flex; gap: 8px; justify-content: flex-end; }
-.form-row { display: flex; gap: 12px; }
-.form-row .form-group { flex: 1; }
-.upload-area { border: 2px dashed #ddd; border-radius: 4px; padding: 16px; text-align: center; cursor: pointer; font-size: 13px; color: #999; }
-.upload-area:hover { border-color: #3b82f6; color: #3b82f6; }
-.upload-area.has-file { border-color: #22c55e; color: #22c55e; }
+html, body, #app { height: 100%; margin: 0; }
+.layout { height: 100%; display: flex; }
+.sidebar { width: 220px; background: #1d1e2c; display: flex; flex-direction: column; }
+.sidebar .logo { padding: 20px; text-align: center; border-bottom: 1px solid rgba(255,255,255,0.08); }
+.sidebar .logo h1 { color: #fff; font-size: 16px; font-weight: 600; margin: 0; }
+.sidebar .logo p { color: #666; font-size: 11px; margin: 4px 0 0; }
+.sidebar .el-menu { border-right: none; flex: 1; }
+.main { flex: 1; display: flex; flex-direction: column; background: #f0f2f5; overflow: hidden; }
+.topbar { height: 56px; background: #fff; display: flex; align-items: center; justify-content: space-between; padding: 0 24px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); z-index: 10; }
+.topbar .page-title { font-size: 16px; font-weight: 600; color: #333; }
+.topbar .status-bar { display: flex; gap: 16px; font-size: 13px; color: #666; }
+.topbar .status-bar .num { font-weight: 600; color: #333; }
+.content { flex: 1; padding: 20px; overflow-y: auto; }
+.node-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(400px, 1fr)); gap: 16px; }
+.node-card { border-radius: 8px; }
+.node-card .el-card__body { padding: 20px; }
+.card-header { display: flex; justify-content: space-between; align-items: center; }
+.card-header .name { font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+.card-header .id { font-size: 12px; color: #999; }
+.progress-section { margin-top: 12px; }
+.progress-label { display: flex; justify-content: space-between; font-size: 12px; color: #666; margin-bottom: 4px; }
+.log-box { margin-top: 12px; background: #1a1a2e; border-radius: 6px; padding: 10px; max-height: 220px; overflow-y: auto; font-family: 'Courier New', monospace; font-size: 11px; line-height: 1.7; }
+.log-box .log-line { color: #a5b4fc; }
+.log-box .log-line.WARNING { color: #fbbf24; }
+.log-box .log-line.ERROR { color: #f87171; }
+.log-box .log-line.INFO { color: #a5b4fc; }
+.config-form .el-form-item { margin-bottom: 16px; }
+.upload-zone { border: 2px dashed #dcdfe6; border-radius: 6px; padding: 24px; text-align: center; cursor: pointer; transition: border-color 0.2s; }
+.upload-zone:hover { border-color: #409eff; }
+.upload-zone.uploaded { border-color: #67c23a; }
+.upload-zone img { max-height: 120px; max-width: 100%; margin-top: 8px; border-radius: 4px; }
 </style>
 </head>
 <body>
-<div class="header">
-    <h1>1688 采购管理系统</h1>
-    <div class="stats" id="stats">加载中...</div>
-</div>
-<div class="container">
-    <div class="add-node">
-        <button class="btn btn-primary" onclick="addNode()">+ 添加节点</button>
+<div id="app">
+<div class="layout">
+    <!-- 侧边栏 -->
+    <div class="sidebar">
+        <div class="logo">
+            <h1>1688 采购系统</h1>
+            <p>Multi-Server Manager</p>
+        </div>
+        <el-menu :default-active="currentPage" background-color="#1d1e2c" text-color="#8c8fa0" active-text-color="#409eff" @select="onMenuSelect">
+            <el-menu-item index="dashboard">
+                <el-icon><Monitor /></el-icon>
+                <span>控制台</span>
+            </el-menu-item>
+            <el-menu-item index="nodes">
+                <el-icon><Connection /></el-icon>
+                <span>节点管理</span>
+            </el-menu-item>
+            <el-menu-item index="reports">
+                <el-icon><DataAnalysis /></el-icon>
+                <span>报告汇总</span>
+            </el-menu-item>
+        </el-menu>
     </div>
-    <div class="node-grid" id="nodeGrid"></div>
+
+    <!-- 主区域 -->
+    <div class="main">
+        <!-- 顶部导航 -->
+        <div class="topbar">
+            <div class="page-title">{{ pageTitle }}</div>
+            <div class="status-bar">
+                <span>节点 <span class="num">{{ nodeList.length }}</span></span>
+                <span>在线 <span class="num" style="color:#67c23a">{{ onlineCount }}</span></span>
+                <span>运行中 <span class="num" style="color:#409eff">{{ activeCount }}</span></span>
+            </div>
+        </div>
+
+        <!-- 内容区 -->
+        <div class="content">
+
+            <!-- 控制台页面 -->
+            <template v-if="currentPage === 'dashboard'">
+                <div style="margin-bottom: 16px; text-align: right">
+                    <el-button type="primary" @click="showAddNode = true">
+                        <el-icon><Plus /></el-icon> 添加节点
+                    </el-button>
+                </div>
+                <el-empty v-if="nodeList.length === 0" description="暂无节点，请先添加"></el-empty>
+                <div class="node-grid" v-else>
+                    <el-card class="node-card" v-for="n in nodeList" :key="n.id" shadow="hover">
+                        <div class="card-header">
+                            <div class="name">
+                                <el-badge is-dot :type="n.online ? 'success' : 'danger'" />
+                                {{ n.name || n.id }}
+                            </div>
+                            <div class="id">{{ n.id }}</div>
+                        </div>
+
+                        <el-tag :type="statusType(n)" size="small" style="margin-top: 10px">
+                            {{ statusLabel(n) }}
+                        </el-tag>
+
+                        <!-- 进度 -->
+                        <div class="progress-section" v-if="n.task_progress && n.task_status === 'filling_cart'">
+                            <div class="progress-label">
+                                <span>已加购 {{ n.task_progress.items_added || 0 }} 件</span>
+                                <span>¥{{ (n.task_progress.local_amount || 0).toFixed(2) }} / ¥{{ n.task_progress.target_amount || 0 }}</span>
+                            </div>
+                            <el-progress :percentage="progressPct(n)" :show-text="false" :stroke-width="8" />
+                        </div>
+
+                        <!-- 操作按钮 -->
+                        <div style="margin-top: 14px; display: flex; gap: 6px; flex-wrap: wrap">
+                            <el-button size="small" @click="openConfig(n)">配置</el-button>
+                            <template v-if="!n.online">
+                                <el-tag type="info" size="small">离线</el-tag>
+                            </template>
+                            <template v-else-if="!n.task_status || ['idle','completed','failed','cancelled'].includes(n.task_status)">
+                                <el-button type="success" size="small" @click="startTask(n.id)">启动</el-button>
+                            </template>
+                            <template v-else-if="n.task_status === 'awaiting_approval'">
+                                <el-button type="success" size="small" @click="approveCheckout(n.task_id)">确认结算</el-button>
+                                <el-button type="danger" size="small" @click="rejectCheckout(n.task_id)">取消结算</el-button>
+                            </template>
+                            <template v-else>
+                                <el-button type="danger" size="small" @click="stopTask(n.id)">停止</el-button>
+                            </template>
+                            <el-button size="small" :type="showLogs[n.id] ? 'primary' : ''" @click="toggleLog(n.id)" plain>
+                                日志
+                            </el-button>
+                        </div>
+
+                        <!-- 日志面板 -->
+                        <div class="log-box" v-if="showLogs[n.id]" :ref="el => logRefs[n.id] = el">
+                            <div class="log-line" :class="l.level" v-for="(l, i) in (nodeLogs[n.id] || []).slice(-100)" :key="i">
+                                {{ l.message }}
+                            </div>
+                        </div>
+                    </el-card>
+                </div>
+            </template>
+
+            <!-- 节点管理页面 -->
+            <template v-if="currentPage === 'nodes'">
+                <el-table :data="nodeList" stripe>
+                    <el-table-column prop="id" label="节点ID" width="100" />
+                    <el-table-column prop="name" label="名称" />
+                    <el-table-column label="状态" width="100">
+                        <template #default="{row}">
+                            <el-tag :type="row.online ? 'success' : 'info'" size="small">
+                                {{ row.online ? '在线' : '离线' }}
+                            </el-tag>
+                        </template>
+                    </el-table-column>
+                    <el-table-column label="任务状态" width="140">
+                        <template #default="{row}">
+                            <el-tag v-if="row.task_status" :type="statusType(row)" size="small">
+                                {{ statusLabel(row) }}
+                            </el-tag>
+                            <span v-else style="color:#999">-</span>
+                        </template>
+                    </el-table-column>
+                    <el-table-column label="操作" width="200">
+                        <template #default="{row}">
+                            <el-button size="small" @click="openConfig(row)">配置</el-button>
+                            <el-button size="small" type="danger" @click="deleteNode(row.id)">删除</el-button>
+                        </template>
+                    </el-table-column>
+                </el-table>
+            </template>
+
+            <!-- 报告汇总页面 -->
+            <template v-if="currentPage === 'reports'">
+                <el-empty description="报告汇总功能开发中" />
+            </template>
+
+        </div>
+    </div>
 </div>
+
+<!-- 添加节点弹窗 -->
+<el-dialog v-model="showAddNode" title="添加节点" width="420px">
+    <el-form label-width="80px">
+        <el-form-item label="节点名称">
+            <el-input v-model="newNodeName" placeholder="如：服务器A-张三" />
+        </el-form-item>
+    </el-form>
+    <template #footer>
+        <el-button @click="showAddNode = false">取消</el-button>
+        <el-button type="primary" @click="addNode">创建</el-button>
+    </template>
+</el-dialog>
+
+<!-- 节点创建结果弹窗 -->
+<el-dialog v-model="showNodeResult" title="节点创建成功" width="500px">
+    <el-alert type="success" :closable="false" style="margin-bottom: 16px">
+        请将以下配置填入采购服务器的 agent/agent_config.json
+    </el-alert>
+    <pre style="background:#1a1a2e;color:#67c23a;padding:16px;border-radius:6px;font-size:13px;overflow-x:auto">{{ nodeResultJson }}</pre>
+    <template #footer>
+        <el-button @click="copyNodeResult">复制配置</el-button>
+        <el-button type="primary" @click="showNodeResult = false">确定</el-button>
+    </template>
+</el-dialog>
 
 <!-- 配置编辑弹窗 -->
-<div class="modal-overlay" id="configModal">
-<div class="modal">
-    <h2 id="configModalTitle">节点配置</h2>
-    <input type="hidden" id="cfgNodeId">
+<el-dialog v-model="showConfig" :title="configTitle" width="520px">
+    <el-form label-width="110px" class="config-form">
+        <el-form-item label="搜索图片">
+            <div class="upload-zone" :class="{uploaded: configForm.imagePreview}"
+                 @click="$refs.fileInput.click()"
+                 @dragover.prevent="$event.currentTarget.style.borderColor='#409eff'"
+                 @dragleave.prevent="$event.currentTarget.style.borderColor='#dcdfe6'"
+                 @drop.prevent="onDrop($event)">
+                <template v-if="configForm.imagePreview">
+                    <img :src="configForm.imagePreview" />
+                </template>
+                <template v-else>
+                    <el-icon :size="32" color="#c0c4cc"><UploadFilled /></el-icon>
+                    <p style="color:#909399;font-size:13px;margin:8px 0 0">点击上传 / Ctrl+V 粘贴 / 拖拽图片</p>
+                </template>
+            </div>
+            <input ref="fileInput" type="file" accept="image/*" style="display:none" @change="onFileChange">
+            <el-select v-model="configForm.selectedImage" placeholder="或选择已上传的图片" style="margin-top:8px;width:100%" @change="onSelectExisting">
+                <el-option v-for="img in imageList" :key="img.id" :label="img.filename + ' (' + Math.round(img.size/1024) + 'KB)'" :value="img.id" />
+            </el-select>
+        </el-form-item>
+        <el-form-item label="目标店铺">
+            <el-input v-model="configForm.shopName" placeholder="店铺名称（支持部分匹配）" />
+        </el-form-item>
+        <el-form-item label="采购目标金额">
+            <el-input-number v-model="configForm.targetAmount" :min="100" :step="500" style="width:100%" />
+        </el-form-item>
+        <el-form-item label="每单限额">
+            <el-input-number v-model="configForm.orderLimit" :min="100" :step="100" style="width:100%" />
+        </el-form-item>
+        <el-form-item label="运费预留">
+            <el-input-number v-model="configForm.shippingReserve" :min="0" :step="5" style="width:100%" />
+        </el-form-item>
+        <el-form-item label="最大加购数">
+            <el-input-number v-model="configForm.maxItems" :min="1" :step="50" style="width:100%" />
+        </el-form-item>
+    </el-form>
+    <template #footer>
+        <el-button @click="showConfig = false">取消</el-button>
+        <el-button type="primary" @click="saveConfig">保存配置</el-button>
+    </template>
+</el-dialog>
 
-    <div class="form-group">
-        <label>搜索图片</label>
-        <div class="upload-area" id="uploadArea" onclick="document.getElementById('imageFile').click()" tabindex="0">
-            点击上传 / Ctrl+V 粘贴 / 拖拽图片
-        </div>
-        <img id="imagePreview" style="display:none;max-width:100%;max-height:150px;margin-top:8px;border-radius:4px">
-        <input type="file" id="imageFile" accept="image/*" style="display:none" onchange="onImageSelected(this)">
-        <select id="existingImage" style="margin-top:6px;width:100%;padding:6px;font-size:12px">
-            <option value="">-- 或选择已上传的图片 --</option>
-        </select>
-    </div>
-
-    <div class="form-group">
-        <label>目标店铺名称</label>
-        <input type="text" id="cfgShopName" placeholder="支持部分匹配">
-    </div>
-
-    <div class="form-row">
-        <div class="form-group">
-            <label>采购目标金额（元）</label>
-            <input type="number" id="cfgTargetAmount" value="2000">
-        </div>
-        <div class="form-group">
-            <label>每单限额（元）</label>
-            <input type="number" id="cfgOrderLimit" value="500">
-        </div>
-    </div>
-
-    <div class="form-row">
-        <div class="form-group">
-            <label>运费预留（元）</label>
-            <input type="number" id="cfgShippingReserve" value="15">
-        </div>
-        <div class="form-group">
-            <label>最大加购数量</label>
-            <input type="number" id="cfgMaxItems" value="200">
-        </div>
-    </div>
-
-    <div class="form-actions">
-        <button class="btn" onclick="closeConfigModal()">取消</button>
-        <button class="btn btn-primary" onclick="saveConfig()">保存配置</button>
-    </div>
-</div>
 </div>
 
 <script>
-const STATUS_LABELS = {
-    idle: '空闲', starting: '启动中', waiting_login: '等待登录',
-    logged_in: '已登录', searching: '搜图中', entering_shop: '进入店铺',
-    filling_cart: '加购中', cart_filled: '加购完成',
-    awaiting_approval: '等待确认结算', checking_out: '结算中',
-    completed: '已完成', failed: '异常', cancelled: '已取消',
-    online: '在线', offline: '离线'
-};
+const { createApp, ref, computed, reactive, nextTick, onMounted, watch } = Vue;
 
-let nodes = {};
-let nodeLogs = {};
-let ws = null;
-let pendingImageId = null;
+const app = createApp({
+    setup() {
+        const currentPage = ref('dashboard');
+        const nodes = reactive({});
+        const nodeLogs = reactive({});
+        const showLogs = reactive({});
+        const logRefs = reactive({});
 
-function connectWS() {
-    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-    ws = new WebSocket(proto + '://' + location.host + '/ws/dashboard');
-    ws.onopen = () => console.log('Dashboard WS connected');
-    ws.onclose = () => setTimeout(connectWS, 3000);
-    ws.onmessage = (e) => { try { handleMessage(JSON.parse(e.data)); } catch(err) {} };
-}
+        // 添加节点
+        const showAddNode = ref(false);
+        const newNodeName = ref('');
+        const showNodeResult = ref(false);
+        const nodeResultJson = ref('');
 
-function handleMessage(msg) {
-    const p = msg.payload || {};
-    const nodeId = p.node_id;
-    if (!nodeId) return;
-    if (!nodes[nodeId]) nodes[nodeId] = { id: nodeId, name: p.name || nodeId, online: false, task_status: null, task_progress: null, task_id: null };
-    if (!nodeLogs[nodeId]) nodeLogs[nodeId] = [];
-
-    if (msg.type === 'status_update') {
-        if (p.status === 'online') { nodes[nodeId].online = true; nodes[nodeId].name = p.name || nodes[nodeId].name; }
-        else if (p.status === 'offline') { nodes[nodeId].online = false; nodes[nodeId].task_status = null; }
-        else { nodes[nodeId].task_status = p.status; if (p.task_id) nodes[nodeId].task_id = p.task_id; }
-    } else if (msg.type === 'progress_update') {
-        nodes[nodeId].task_progress = p; nodes[nodeId].task_status = 'filling_cart';
-        if (p.task_id) nodes[nodeId].task_id = p.task_id;
-    } else if (msg.type === 'log_entry') {
-        const logs = nodeLogs[nodeId]; logs.push(p);
-        if (logs.length > 200) logs.splice(0, logs.length - 200);
-        updateLogPanel(nodeId); return;
-    } else if (msg.type === 'task_report') { nodes[nodeId].task_status = 'completed'; }
-    renderNodes();
-}
-
-function renderNodes() {
-    const grid = document.getElementById('nodeGrid');
-    const nodeList = Object.values(nodes);
-    if (nodeList.length === 0) {
-        grid.innerHTML = '<div class="empty"><p>暂无节点</p><p>点击"添加节点"生成 Agent 配置</p></div>';
-        updateStats(nodeList); return;
-    }
-    grid.innerHTML = nodeList.map(n => {
-        const dotClass = n.online ? 'online' : 'offline';
-        const st = n.task_status;
-        const statusText = n.online ? (STATUS_LABELS[st] || '空闲') : '离线';
-        let taskClass = 'idle';
-        if (st === 'awaiting_approval') taskClass = 'warning';
-        else if (st === 'failed') taskClass = 'error';
-        else if (st && st !== 'idle' && st !== 'completed' && st !== 'cancelled') taskClass = 'active';
-
-        let progressHtml = '';
-        if (n.task_progress && n.online && st === 'filling_cart') {
-            const p = n.task_progress;
-            const pct = p.target_amount > 0 ? Math.min(100, (p.local_amount / p.target_amount) * 100) : 0;
-            progressHtml = '<div class="node-info">'
-                + '<span class="label">已加购:</span> ' + (p.items_added || 0) + ' 件 | '
-                + '<span class="label">累计:</span> \u00a5' + (p.local_amount || 0).toFixed(2)
-                + ' / \u00a5' + (p.target_amount || 0)
-                + '</div><div class="progress-bar"><div class="progress-fill" style="width:' + pct.toFixed(1) + '%"></div></div>';
-        }
-
-        let actionsHtml = '<div class="actions">';
-        actionsHtml += '<button class="btn btn-primary" onclick="openConfigModal(\'' + n.id + '\',\'' + (n.name||'').replace(/'/g,"\\'") + '\')">配置</button>';
-        if (!n.online) {
-            actionsHtml += '<span style="font-size:12px;color:#999;margin-left:4px">节点离线</span>';
-        } else if (!st || st === 'idle' || st === 'completed' || st === 'failed' || st === 'cancelled') {
-            actionsHtml += '<button class="btn btn-success" onclick="startTask(\'' + n.id + '\')">启动</button>';
-        } else if (st === 'awaiting_approval') {
-            actionsHtml += '<button class="btn btn-success" onclick="approveCheckout(\'' + n.task_id + '\')">确认结算</button>';
-            actionsHtml += '<button class="btn btn-danger" onclick="rejectCheckout(\'' + n.task_id + '\')">取消结算</button>';
-        } else {
-            actionsHtml += '<button class="btn btn-danger" onclick="stopTask(\'' + n.id + '\')">停止</button>';
-        }
-        actionsHtml += '<button class="btn" onclick="toggleLog(\'' + n.id + '\')">日志</button>';
-        actionsHtml += '</div>';
-
-        return '<div class="node-card" id="card-' + n.id + '">'
-            + '<div class="node-header"><span class="node-name"><span class="status-dot ' + dotClass + '"></span>' + (n.name || n.id) + '</span>'
-            + '<span style="font-size:12px;color:#999">' + n.id + '</span></div>'
-            + '<div class="task-status ' + taskClass + '">' + statusText + '</div>'
-            + progressHtml + actionsHtml
-            + '<div class="log-panel" id="log-' + n.id + '"></div></div>';
-    }).join('');
-    updateStats(nodeList);
-}
-
-function updateStats(nodeList) {
-    const online = nodeList.filter(n => n.online).length;
-    const active = nodeList.filter(n => n.online && n.task_status && !['idle','completed','failed','cancelled'].includes(n.task_status)).length;
-    document.getElementById('stats').textContent = '节点: ' + nodeList.length + ' | 在线: ' + online + ' | 运行中: ' + active;
-}
-
-function updateLogPanel(nodeId) {
-    const panel = document.getElementById('log-' + nodeId);
-    if (!panel || !panel.classList.contains('show')) return;
-    const logs = nodeLogs[nodeId] || [];
-    panel.innerHTML = logs.slice(-100).map(l => '<div class="log-entry ' + (l.level||'') + '">' + (l.message||'') + '</div>').join('');
-    panel.scrollTop = panel.scrollHeight;
-}
-
-function toggleLog(nodeId) {
-    const panel = document.getElementById('log-' + nodeId);
-    if (!panel) return;
-    panel.classList.toggle('show');
-    if (panel.classList.contains('show')) updateLogPanel(nodeId);
-}
-
-// === 配置弹窗 ===
-async function openConfigModal(nodeId, nodeName) {
-    document.getElementById('cfgNodeId').value = nodeId;
-    document.getElementById('configModalTitle').textContent = (nodeName || nodeId) + ' - 配置';
-    pendingImageId = null;
-    document.getElementById('uploadArea').textContent = '点击上传搜索图片';
-    document.getElementById('uploadArea').className = 'upload-area';
-    document.getElementById('imageFile').value = '';
-
-    // 加载已有图片列表
-    try {
-        const res = await fetch('/api/images');
-        const imgs = await res.json();
-        const sel = document.getElementById('existingImage');
-        sel.innerHTML = '<option value="">-- 或选择已上传的图片 --</option>';
-        imgs.forEach(img => {
-            sel.innerHTML += '<option value="' + img.id + '">' + img.filename + ' (' + Math.round(img.size/1024) + 'KB)</option>';
+        // 配置
+        const showConfig = ref(false);
+        const configTitle = ref('');
+        const configNodeId = ref('');
+        const imageList = ref([]);
+        const configForm = reactive({
+            shopName: '', targetAmount: 2000, orderLimit: 500,
+            shippingReserve: 15, maxItems: 200, imageId: null,
+            selectedImage: '', imagePreview: null,
         });
-    } catch(e) {}
 
-    // 加载已有配置
-    try {
-        const res = await fetch('/api/nodes/' + nodeId + '/config');
-        const data = await res.json();
-        const cfg = data.config || {};
-        document.getElementById('cfgShopName').value = (cfg.search || {}).target_shop_name || '';
-        document.getElementById('cfgTargetAmount').value = (cfg.cart || {}).target_amount || 2000;
-        document.getElementById('cfgOrderLimit').value = (cfg.cart || {}).order_limit || 500;
-        document.getElementById('cfgShippingReserve').value = (cfg.cart || {}).shipping_reserve || 15;
-        document.getElementById('cfgMaxItems').value = (cfg.cart || {}).max_items || 200;
-        if (data.image_id) {
-            document.getElementById('existingImage').value = data.image_id;
-            pendingImageId = data.image_id;
+        const STATUS_LABELS = {
+            idle:'空闲', starting:'启动中', waiting_login:'等待登录',
+            logged_in:'已登录', searching:'搜图中', entering_shop:'进入店铺',
+            filling_cart:'加购中', cart_filled:'加购完成',
+            awaiting_approval:'等待确认结算', checking_out:'结算中',
+            completed:'已完成', failed:'异常', cancelled:'已取消',
+        };
+
+        const pageTitle = computed(() => ({dashboard:'控制台', nodes:'节点管理', reports:'报告汇总'}[currentPage.value] || ''));
+        const nodeList = computed(() => Object.values(nodes));
+        const onlineCount = computed(() => nodeList.value.filter(n => n.online).length);
+        const activeCount = computed(() => nodeList.value.filter(n => n.online && n.task_status && !['idle','completed','failed','cancelled'].includes(n.task_status)).length);
+
+        function statusLabel(n) {
+            if (!n.online) return '离线';
+            return STATUS_LABELS[n.task_status] || '空闲';
         }
-    } catch(e) {}
-
-    document.getElementById('configModal').classList.add('show');
-}
-
-function closeConfigModal() {
-    document.getElementById('configModal').classList.remove('show');
-}
-
-function onImageSelected(input) {
-    if (!input.files || !input.files[0]) return;
-    uploadFile(input.files[0]);
-}
-
-async function uploadFile(file) {
-    const area = document.getElementById('uploadArea');
-    const preview = document.getElementById('imagePreview');
-    area.textContent = '上传中...';
-
-    const formData = new FormData();
-    formData.append('file', file, file.name || 'paste.png');
-    try {
-        const res = await fetch('/api/images', { method: 'POST', body: formData });
-        const data = await res.json();
-        pendingImageId = data.id;
-        area.textContent = (file.name || 'paste.png') + ' (' + Math.round(data.size/1024) + 'KB) \u2713';
-        area.className = 'upload-area has-file';
-        document.getElementById('existingImage').value = '';
-        // 显示预览
-        const reader = new FileReader();
-        reader.onload = function(e) { preview.src = e.target.result; preview.style.display = 'block'; };
-        reader.readAsDataURL(file);
-        // 刷新图片列表
-        const res2 = await fetch('/api/images');
-        const imgs = await res2.json();
-        const sel = document.getElementById('existingImage');
-        sel.innerHTML = '<option value="">-- 或选择已上传的图片 --</option>';
-        imgs.forEach(img => { sel.innerHTML += '<option value="' + img.id + '">' + img.filename + '</option>'; });
-    } catch(e) { area.textContent = '上传失败，点击重试'; }
-}
-
-async function saveConfig() {
-    const nodeId = document.getElementById('cfgNodeId').value;
-    const imageId = pendingImageId || document.getElementById('existingImage').value || null;
-
-    const config = {
-        browser: { type: 'chromium', headless: false, slow_mo: 100, profile_dir: '~/1688/browser_profile' },
-        search: {
-            image_path: '',
-            target_shop_name: document.getElementById('cfgShopName').value,
-        },
-        cart: {
-            target_amount: parseFloat(document.getElementById('cfgTargetAmount').value) || 2000,
-            amount_strategy: 'not_exceed',
-            max_items: parseInt(document.getElementById('cfgMaxItems').value) || 200,
-            order_limit: parseFloat(document.getElementById('cfgOrderLimit').value) || 500,
-            shipping_reserve: parseFloat(document.getElementById('cfgShippingReserve').value) || 15,
-        },
-        timeouts: { page_load: 30000, element_wait: 10000, login_wait: 120000 },
-        logging: { level: 'INFO', file: 'logs/app.log' },
-    };
-
-    try {
-        const res = await fetch('/api/nodes/' + nodeId + '/config', {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ config: config, image_id: imageId }),
-        });
-        if (res.ok) {
-            alert('配置已保存');
-            closeConfigModal();
-        } else {
-            const data = await res.json();
-            alert('保存失败: ' + (data.detail || ''));
+        function statusType(n) {
+            if (!n.online) return 'info';
+            const s = n.task_status;
+            if (s === 'awaiting_approval') return 'warning';
+            if (s === 'failed') return 'danger';
+            if (s === 'completed') return 'success';
+            if (s && s !== 'idle') return 'primary';
+            return 'info';
         }
-    } catch(e) { alert('保存失败: ' + e.message); }
-}
-
-// === 任务操作 ===
-async function startTask(nodeId) {
-    try {
-        const res = await fetch('/api/tasks/nodes/' + nodeId + '/start', { method: 'POST' });
-        const data = await res.json();
-        if (!res.ok) alert('启动失败: ' + (data.detail || JSON.stringify(data)));
-    } catch(e) { alert('请求失败: ' + e.message); }
-}
-async function stopTask(nodeId) {
-    if (!confirm('确认停止任务？')) return;
-    try { await fetch('/api/tasks/nodes/' + nodeId + '/stop', { method: 'POST' }); } catch(e) { alert(e.message); }
-}
-async function approveCheckout(taskId) {
-    try { await fetch('/api/tasks/' + taskId + '/approve', { method: 'POST' }); } catch(e) { alert(e.message); }
-}
-async function rejectCheckout(taskId) {
-    try { await fetch('/api/tasks/' + taskId + '/reject', { method: 'POST' }); } catch(e) { alert(e.message); }
-}
-async function addNode() {
-    const name = prompt('输入节点名称：');
-    if (name === null) return;
-    try {
-        const res = await fetch('/api/nodes/tokens', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({name:name||''}) });
-        const data = await res.json();
-        alert('节点已创建！\n\n节点ID: ' + data.node_id + '\n节点名: ' + data.name
-            + '\n\n请在采购服务器的 agent/agent_config.json 中填入:\n\n'
-            + JSON.stringify({server_url:'ws://'+location.host+'/ws/agent',node_id:data.node_id,token:data.token}, null, 2));
-        loadNodes();
-    } catch(e) { alert('创建失败: ' + e.message); }
-}
-async function loadNodes() {
-    try {
-        const res = await fetch('/api/nodes');
-        const list = await res.json();
-        for (const n of list) nodes[n.id] = { id:n.id, name:n.name, online:n.online, task_status:n.task_status, task_progress:n.task_progress, task_id:null };
-        renderNodes();
-    } catch(e) {}
-}
-
-// 粘贴图片支持（全局监听，配置弹窗打开时生效）
-window.addEventListener('paste', function(e) {
-    var modal = document.getElementById('configModal');
-    if (!modal || !modal.classList.contains('show')) return;
-    var items = (e.clipboardData || e.originalEvent && e.originalEvent.clipboardData || {}).items;
-    if (!items) return;
-    for (var i = 0; i < items.length; i++) {
-        if (items[i].type.indexOf('image') !== -1) {
-            var file = items[i].getAsFile();
-            if (file) { uploadFile(file); e.preventDefault(); return; }
+        function progressPct(n) {
+            if (!n.task_progress || !n.task_progress.target_amount) return 0;
+            return Math.min(100, (n.task_progress.local_amount / n.task_progress.target_amount) * 100);
         }
-    }
-}, true);
 
-// 拖拽上传支持
-window.addEventListener('load', function() {
-    var area = document.getElementById('uploadArea');
-    if (!area) return;
-    area.addEventListener('dragover', function(e) { e.preventDefault(); e.stopPropagation(); this.style.borderColor = '#3b82f6'; });
-    area.addEventListener('dragleave', function(e) { e.preventDefault(); this.style.borderColor = '#ddd'; });
-    area.addEventListener('drop', function(e) {
-        e.preventDefault(); e.stopPropagation(); this.style.borderColor = '#ddd';
-        if (e.dataTransfer.files && e.dataTransfer.files[0]) uploadFile(e.dataTransfer.files[0]);
-    });
-    // 上传区域也监听粘贴
-    area.addEventListener('paste', function(e) {
-        var items = (e.clipboardData || {}).items;
-        if (!items) return;
-        for (var i = 0; i < items.length; i++) {
-            if (items[i].type.indexOf('image') !== -1) {
-                var file = items[i].getAsFile();
-                if (file) { uploadFile(file); e.preventDefault(); return; }
+        // WebSocket
+        let ws = null;
+        function connectWS() {
+            const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+            ws = new WebSocket(proto + '://' + location.host + '/ws/dashboard');
+            ws.onclose = () => setTimeout(connectWS, 3000);
+            ws.onmessage = (e) => { try { handleMsg(JSON.parse(e.data)); } catch(err){} };
+        }
+        function handleMsg(msg) {
+            const p = msg.payload || {};
+            const nid = p.node_id;
+            if (!nid) return;
+            if (!nodes[nid]) nodes[nid] = {id:nid, name:p.name||nid, online:false, task_status:null, task_progress:null, task_id:null};
+            if (!nodeLogs[nid]) nodeLogs[nid] = [];
+
+            if (msg.type === 'status_update') {
+                if (p.status === 'online') { nodes[nid].online = true; if (p.name) nodes[nid].name = p.name; }
+                else if (p.status === 'offline') { nodes[nid].online = false; nodes[nid].task_status = null; }
+                else { nodes[nid].task_status = p.status; if (p.task_id) nodes[nid].task_id = p.task_id; }
+            } else if (msg.type === 'progress_update') {
+                nodes[nid].task_progress = p; nodes[nid].task_status = 'filling_cart';
+                if (p.task_id) nodes[nid].task_id = p.task_id;
+            } else if (msg.type === 'log_entry') {
+                nodeLogs[nid].push(p);
+                if (nodeLogs[nid].length > 200) nodeLogs[nid].splice(0, nodeLogs[nid].length - 200);
+                nextTick(() => { const el = logRefs[nid]; if (el) el.scrollTop = el.scrollHeight; });
+            } else if (msg.type === 'task_report') {
+                nodes[nid].task_status = 'completed';
             }
         }
-    });
+
+        // API calls
+        async function loadNodes() {
+            try {
+                const res = await fetch('/api/nodes');
+                const list = await res.json();
+                list.forEach(n => { nodes[n.id] = {id:n.id, name:n.name, online:n.online, task_status:n.task_status, task_progress:n.task_progress, task_id:null}; });
+            } catch(e) {}
+        }
+
+        async function addNode() {
+            try {
+                const res = await fetch('/api/nodes/tokens', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({name:newNodeName.value||''})});
+                const data = await res.json();
+                nodeResultJson.value = JSON.stringify({server_url:'ws://'+location.host+'/ws/agent', node_id:data.node_id, token:data.token}, null, 2);
+                showAddNode.value = false;
+                showNodeResult.value = true;
+                newNodeName.value = '';
+                loadNodes();
+            } catch(e) { ElementPlus.ElMessage.error('创建失败'); }
+        }
+
+        function copyNodeResult() {
+            navigator.clipboard.writeText(nodeResultJson.value);
+            ElementPlus.ElMessage.success('已复制');
+        }
+
+        async function deleteNode(id) {
+            try { await ElementPlus.ElMessageBox.confirm('确认删除此节点？', '删除'); } catch { return; }
+            await fetch('/api/nodes/' + id, {method:'DELETE'});
+            delete nodes[id];
+        }
+
+        async function startTask(nodeId) {
+            try {
+                const res = await fetch('/api/tasks/nodes/' + nodeId + '/start', {method:'POST'});
+                if (!res.ok) { const d = await res.json(); ElementPlus.ElMessage.error(d.detail || '启动失败'); }
+            } catch(e) { ElementPlus.ElMessage.error(e.message); }
+        }
+        async function stopTask(nodeId) {
+            try { await ElementPlus.ElMessageBox.confirm('确认停止？', '停止任务'); } catch { return; }
+            await fetch('/api/tasks/nodes/' + nodeId + '/stop', {method:'POST'});
+        }
+        async function approveCheckout(taskId) { await fetch('/api/tasks/' + taskId + '/approve', {method:'POST'}); }
+        async function rejectCheckout(taskId) { await fetch('/api/tasks/' + taskId + '/reject', {method:'POST'}); }
+
+        function toggleLog(nid) { showLogs[nid] = !showLogs[nid]; }
+
+        // 配置
+        async function openConfig(n) {
+            configNodeId.value = n.id;
+            configTitle.value = (n.name || n.id) + ' - 配置';
+            configForm.imagePreview = null;
+            configForm.selectedImage = '';
+            configForm.imageId = null;
+            try {
+                const [cfgRes, imgRes] = await Promise.all([
+                    fetch('/api/nodes/' + n.id + '/config'),
+                    fetch('/api/images')
+                ]);
+                const cfgData = await cfgRes.json();
+                imageList.value = await imgRes.json();
+                const cfg = cfgData.config || {};
+                configForm.shopName = (cfg.search||{}).target_shop_name || '';
+                configForm.targetAmount = (cfg.cart||{}).target_amount || 2000;
+                configForm.orderLimit = (cfg.cart||{}).order_limit || 500;
+                configForm.shippingReserve = (cfg.cart||{}).shipping_reserve || 15;
+                configForm.maxItems = (cfg.cart||{}).max_items || 200;
+                if (cfgData.image_id) { configForm.selectedImage = cfgData.image_id; configForm.imageId = cfgData.image_id; }
+            } catch(e) {}
+            showConfig.value = true;
+        }
+
+        async function uploadFile(file) {
+            const fd = new FormData();
+            fd.append('file', file, file.name || 'paste.png');
+            try {
+                const res = await fetch('/api/images', {method:'POST', body:fd});
+                const data = await res.json();
+                configForm.imageId = data.id;
+                configForm.selectedImage = '';
+                const reader = new FileReader();
+                reader.onload = (e) => { configForm.imagePreview = e.target.result; };
+                reader.readAsDataURL(file);
+                const imgRes = await fetch('/api/images');
+                imageList.value = await imgRes.json();
+                ElementPlus.ElMessage.success('图片已上传');
+            } catch(e) { ElementPlus.ElMessage.error('上传失败'); }
+        }
+
+        function onFileChange(e) { if (e.target.files[0]) uploadFile(e.target.files[0]); }
+        function onDrop(e) { if (e.dataTransfer.files[0]) uploadFile(e.dataTransfer.files[0]); }
+        function onSelectExisting(val) { configForm.imageId = val; configForm.imagePreview = null; }
+
+        async function saveConfig() {
+            const config = {
+                browser: {type:'chromium', headless:false, slow_mo:100, profile_dir:'~/1688/browser_profile'},
+                search: {image_path:'', target_shop_name:configForm.shopName},
+                cart: {target_amount:configForm.targetAmount, amount_strategy:'not_exceed', max_items:configForm.maxItems, order_limit:configForm.orderLimit, shipping_reserve:configForm.shippingReserve},
+                timeouts: {page_load:30000, element_wait:10000, login_wait:120000},
+                logging: {level:'INFO', file:'logs/app.log'},
+            };
+            try {
+                const res = await fetch('/api/nodes/' + configNodeId.value + '/config', {
+                    method:'PUT', headers:{'Content-Type':'application/json'},
+                    body: JSON.stringify({config, image_id: configForm.imageId})
+                });
+                if (res.ok) { ElementPlus.ElMessage.success('配置已保存'); showConfig.value = false; }
+                else { const d = await res.json(); ElementPlus.ElMessage.error(d.detail || '保存失败'); }
+            } catch(e) { ElementPlus.ElMessage.error(e.message); }
+        }
+
+        // 粘贴
+        window.addEventListener('paste', (e) => {
+            if (!showConfig.value) return;
+            const items = (e.clipboardData || {}).items;
+            if (!items) return;
+            for (let i = 0; i < items.length; i++) {
+                if (items[i].type.indexOf('image') !== -1) {
+                    const file = items[i].getAsFile();
+                    if (file) { uploadFile(file); e.preventDefault(); return; }
+                }
+            }
+        }, true);
+
+        function onMenuSelect(index) { currentPage.value = index; }
+
+        onMounted(() => { loadNodes(); connectWS(); });
+
+        return {
+            currentPage, pageTitle, nodeList, onlineCount, activeCount,
+            showLogs, nodeLogs, logRefs, toggleLog,
+            statusLabel, statusType, progressPct,
+            showAddNode, newNodeName, addNode,
+            showNodeResult, nodeResultJson, copyNodeResult,
+            deleteNode, startTask, stopTask, approveCheckout, rejectCheckout,
+            showConfig, configTitle, configForm, imageList,
+            openConfig, saveConfig, onFileChange, onDrop, onSelectExisting,
+            onMenuSelect,
+        };
+    }
 });
 
-loadNodes();
-connectWS();
+app.use(ElementPlus);
+if (typeof ElementPlusIconsVue !== 'undefined') {
+    for (const [key, component] of Object.entries(ElementPlusIconsVue)) {
+        app.component(key, component);
+    }
+}
+app.mount('#app');
 </script>
 </body>
 </html>
