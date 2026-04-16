@@ -24,7 +24,15 @@ git clone https://github.com/DaimaoHandle/1688-auto-purchase.git
 cd 1688-auto-purchase
 ```
 
-首次运行时程序会自动检查并安装依赖（Playwright、浏览器内核等），也可手动安装：
+首次运行前，先执行环境准备脚本：
+
+```bash
+python3 bootstrap.py
+```
+
+自动完成：Python 版本检查、pip 依赖安装、Playwright 浏览器下载、系统库安装、Chrome 检测、登录态管理。
+
+也可手动安装：
 
 ```bash
 pip install -r requirements.txt
@@ -76,7 +84,9 @@ python3 main.py
 ## 项目结构
 
 ```
-main.py              # 主程序入口
+main.py              # 主程序入口（仅业务逻辑）
+bootstrap.py         # 环境准备（依赖安装、登录态管理）
+config_editor.py     # 交互式配置编辑器
 config.json          # 配置文件
 requirements.txt     # Python 依赖
 src/
@@ -86,14 +96,15 @@ src/
   shop.py            # 店铺定位、商品列表、翻页
   cart.py            # 加购、金额校准、分组结算
   utils.py           # 工具函数
-  setup_env.py       # 环境检查与依赖安装
 ```
 
 ## 注意事项
 
+- 首次使用前运行 `python3 bootstrap.py` 准备环境
 - 登录和验证码需要手动完成，程序会等待
-- 首次运行会提示是否安装依赖，选择"否"可跳过（需确保依赖已安装）
 - 浏览器 Profile 保存在 `~/1688/browser_profile/`，保留登录状态
+- 运行 `python3 bootstrap.py` 可管理登录态（保留或清除）
+- 运行 `python3 config_editor.py` 可交互式修改配置
 - 日志输出到 `logs/app.log`
 
 ## License

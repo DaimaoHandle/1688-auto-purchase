@@ -4,10 +4,6 @@ import os
 # 确保从项目根目录运行
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-# 首次运行时检查并安装所有依赖（必须在导入 playwright 相关模块之前执行）
-from src.setup_env import check_and_setup
-check_and_setup()
-
 from src.utils import load_config, setup_logging
 from src.browser import init_browser
 from src.login import wait_for_login
