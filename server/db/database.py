@@ -65,6 +65,18 @@ CREATE TABLE IF NOT EXISTS reports (
     created_at      TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS users (
+    id          TEXT PRIMARY KEY,
+    phone       TEXT NOT NULL UNIQUE,
+    password    TEXT NOT NULL,
+    name        TEXT NOT NULL DEFAULT '',
+    avatar      TEXT NOT NULL DEFAULT '/static/default_avatar.svg',
+    role        TEXT NOT NULL DEFAULT 'user',
+    status      TEXT NOT NULL DEFAULT 'active',
+    created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS task_logs (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     task_id     TEXT NOT NULL,
@@ -86,10 +98,20 @@ async def get_db() -> aiosqlite.Connection:
 
 
 async def init_db():
-    """初始化数据库表结构。"""
+    """初始化数据库表结构，创建默认管理员。"""
+    import hashlib, uuid
     db = await get_db()
     try:
         await db.executescript(_SCHEMA)
+        # 创建默认管理员（如果不存在）
+        cursor = await db.execute("SELECT id FROM users WHERE phone = 'admin'")
+        if not await cursor.fetchone():
+            admin_id = str(uuid.uuid4())[:8]
+            pwd_hash = hashlib.sha256("admin".encode()).hexdigest()
+            await db.execute(
+                "INSERT INTO users (id, phone, password, name, role) VALUES (?, ?, ?, ?, ?)",
+                (admin_id, "admin", pwd_hash, "管理员", "admin")
+            )
         await db.commit()
     finally:
         await db.close()

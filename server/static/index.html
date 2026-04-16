@@ -45,11 +45,37 @@ html, body, #app { height: 100%; margin: 0; }
 .report-table tr:hover td { background: #f5f7fa; }
 .report-table tr:nth-child(even) td { background: #fafafa; }
 .report-table tr:nth-child(even):hover td { background: #f0f2f5; }
+.login-page { height:100%;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#1d1e2c 0%,#2d3748 100%); }
+.login-box { width:380px;background:#fff;border-radius:12px;padding:40px;box-shadow:0 20px 60px rgba(0,0,0,0.3); }
+.login-box h2 { text-align:center;margin-bottom:8px;font-size:20px;color:#1d1e2c; }
+.login-box p { text-align:center;margin-bottom:24px;font-size:13px;color:#909399; }
+.user-bar { display:flex;align-items:center;gap:10px;cursor:pointer; }
+.user-bar img { width:32px;height:32px;border-radius:50%; }
+.user-bar .name { font-size:13px;color:#333; }
 </style>
 </head>
 <body>
 <div id="app">
-<div class="layout">
+
+<!-- 登录页 -->
+<div v-if="!currentUser" class="login-page">
+    <div class="login-box">
+        <h2>1688 采购管理系统</h2>
+        <p>请登录以继续</p>
+        <el-form @submit.prevent="doLogin">
+            <el-form-item>
+                <el-input v-model="loginForm.phone" placeholder="账号（手机号）" prefix-icon="User" size="large" />
+            </el-form-item>
+            <el-form-item>
+                <el-input v-model="loginForm.password" type="password" placeholder="密码" prefix-icon="Lock" size="large" show-password @keyup.enter="doLogin" />
+            </el-form-item>
+            <el-button type="primary" size="large" style="width:100%" @click="doLogin" :loading="loginLoading">登 录</el-button>
+        </el-form>
+    </div>
+</div>
+
+<!-- 主布局（登录后显示） -->
+<div v-else class="layout">
     <!-- 侧边栏 -->
     <div class="sidebar">
         <div class="logo">
@@ -73,10 +99,13 @@ html, body, #app { height: 100%; margin: 0; }
                 <el-icon><DataAnalysis /></el-icon>
                 <span>数据中心</span>
             </el-menu-item>
-            <el-menu-item index="settings">
-                <el-icon><Setting /></el-icon>
-                <span>系统设置</span>
-            </el-menu-item>
+            <el-sub-menu index="settings">
+                <template #title>
+                    <el-icon><Setting /></el-icon>
+                    <span>系统设置</span>
+                </template>
+                <el-menu-item index="users">用户管理</el-menu-item>
+            </el-sub-menu>
         </el-menu>
     </div>
 
@@ -85,10 +114,23 @@ html, body, #app { height: 100%; margin: 0; }
         <!-- 顶部导航 -->
         <div class="topbar">
             <div class="page-title">{{ pageTitle }}</div>
-            <div class="status-bar">
-                <span>节点 <span class="num">{{ nodeList.length }}</span></span>
-                <span>在线 <span class="num" style="color:#67c23a">{{ onlineCount }}</span></span>
-                <span>运行中 <span class="num" style="color:#409eff">{{ activeCount }}</span></span>
+            <div style="display:flex;align-items:center;gap:20px">
+                <div class="status-bar">
+                    <span>节点 <span class="num">{{ nodeList.length }}</span></span>
+                    <span>在线 <span class="num" style="color:#67c23a">{{ onlineCount }}</span></span>
+                    <span>运行中 <span class="num" style="color:#409eff">{{ activeCount }}</span></span>
+                </div>
+                <el-dropdown trigger="click" @command="onUserCmd">
+                    <div class="user-bar">
+                        <img :src="currentUser.avatar || '/static/default_avatar.svg'" />
+                        <span class="name">{{ currentUser.name }}</span>
+                    </div>
+                    <template #dropdown>
+                        <el-dropdown-menu>
+                            <el-dropdown-item command="logout">退出登录</el-dropdown-item>
+                        </el-dropdown-menu>
+                    </template>
+                </el-dropdown>
             </div>
         </div>
 
@@ -274,9 +316,40 @@ html, body, #app { height: 100%; margin: 0; }
                 <el-empty description="任务中心开发中" />
             </template>
 
-            <!-- 系统设置 -->
-            <template v-if="currentPage === 'settings'">
-                <el-empty description="系统设置开发中" />
+            <!-- 用户管理 -->
+            <template v-if="currentPage === 'users'">
+                <div style="margin-bottom:16px;text-align:right">
+                    <el-button type="primary" size="small" @click="showAddUser = true">
+                        <el-icon><Plus /></el-icon> 添加用户
+                    </el-button>
+                </div>
+                <div class="node-grid">
+                    <el-card v-for="u in userList" :key="u.id" shadow="hover" style="border-radius:10px">
+                        <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+                            <img :src="u.avatar || '/static/default_avatar.svg'" style="width:48px;height:48px;border-radius:50%" />
+                            <div>
+                                <div style="font-size:15px;font-weight:600">{{ u.name }}</div>
+                                <div style="font-size:12px;color:#999">{{ u.phone }}</div>
+                            </div>
+                            <el-tag :type="u.role === 'admin' ? 'danger' : 'info'" size="small" style="margin-left:auto">
+                                {{ u.role === 'admin' ? '管理员' : '普通用户' }}
+                            </el-tag>
+                        </div>
+                        <div style="font-size:13px;color:#666;background:#fafafa;border-radius:6px;padding:8px 12px;line-height:2">
+                            <div><span style="color:#909399">状态：</span>
+                                <el-tag :type="u.status === 'active' ? 'success' : 'danger'" size="small">{{ u.status === 'active' ? '正常' : '已禁用' }}</el-tag>
+                            </div>
+                            <div><span style="color:#909399">创建时间：</span>{{ u.created_at }}</div>
+                        </div>
+                        <div style="margin-top:12px;display:flex;gap:6px;border-top:1px solid #eee;padding-top:10px">
+                            <el-button size="small" @click="openEditUser(u)">编辑</el-button>
+                            <el-button size="small" @click="toggleUserStatus(u)">
+                                {{ u.status === 'active' ? '禁用' : '启用' }}
+                            </el-button>
+                            <el-button size="small" type="danger" @click="deleteUser(u.id)" :disabled="u.role === 'admin'">删除</el-button>
+                        </div>
+                    </el-card>
+                </div>
             </template>
 
             <!-- 数据中心 -->
@@ -477,6 +550,56 @@ html, body, #app { height: 100%; margin: 0; }
     </template>
 </el-dialog>
 
+<!-- 添加用户弹窗 -->
+<el-dialog v-model="showAddUser" title="添加用户" width="420px">
+    <el-form label-width="90px">
+        <el-form-item label="手机号">
+            <el-input v-model="addUserForm.phone" placeholder="作为登录名" />
+        </el-form-item>
+        <el-form-item label="密码">
+            <el-input v-model="addUserForm.password" type="password" placeholder="至少8位" show-password />
+        </el-form-item>
+        <el-form-item label="姓名">
+            <el-input v-model="addUserForm.name" placeholder="" />
+        </el-form-item>
+        <el-form-item label="角色">
+            <el-select v-model="addUserForm.role" style="width:100%">
+                <el-option label="普通用户" value="user" />
+                <el-option label="管理员" value="admin" />
+            </el-select>
+        </el-form-item>
+    </el-form>
+    <template #footer>
+        <el-button @click="showAddUser = false">取消</el-button>
+        <el-button type="primary" @click="doAddUser">创建</el-button>
+    </template>
+</el-dialog>
+
+<!-- 编辑用户弹窗 -->
+<el-dialog v-model="showEditUser" title="编辑用户" width="420px">
+    <el-form label-width="90px">
+        <el-form-item label="手机号">
+            <el-input v-model="editUserForm.phone" />
+        </el-form-item>
+        <el-form-item label="新密码">
+            <el-input v-model="editUserForm.password" type="password" placeholder="留空则不修改" show-password />
+        </el-form-item>
+        <el-form-item label="姓名">
+            <el-input v-model="editUserForm.name" />
+        </el-form-item>
+        <el-form-item label="角色">
+            <el-select v-model="editUserForm.role" style="width:100%">
+                <el-option label="普通用户" value="user" />
+                <el-option label="管理员" value="admin" />
+            </el-select>
+        </el-form-item>
+    </el-form>
+    <template #footer>
+        <el-button @click="showEditUser = false">取消</el-button>
+        <el-button type="primary" @click="doEditUser">保存</el-button>
+    </template>
+</el-dialog>
+
 <!-- 编辑节点信息弹窗 -->
 <el-dialog v-model="showEditNode" title="编辑节点信息" width="520px">
     <el-form label-width="100px">
@@ -521,8 +644,90 @@ html, body, #app { height: 100%; margin: 0; }
 <script>
 const { createApp, ref, computed, reactive, nextTick, onMounted, watch } = Vue;
 
+
 const app = createApp({
     setup() {
+        // 认证
+        const currentUser = ref(null);
+        const loginForm = reactive({phone: '', password: ''});
+        const loginLoading = ref(false);
+
+        async function checkAuth() {
+            try {
+                const res = await fetch('/api/auth/me');
+                if (res.ok) currentUser.value = await res.json();
+            } catch(e) {}
+        }
+
+        async function doLogin() {
+            loginLoading.value = true;
+            try {
+                const res = await fetch('/api/auth/login', {
+                    method: 'POST', headers: {'Content-Type':'application/json'},
+                    body: JSON.stringify({phone: loginForm.phone, password: loginForm.password})
+                });
+                const data = await res.json();
+                if (res.ok) { currentUser.value = data.user; loginForm.phone = ''; loginForm.password = ''; }
+                else ElementPlus.ElMessage.error(data.detail || '登录失败');
+            } catch(e) { ElementPlus.ElMessage.error('网络错误'); }
+            finally { loginLoading.value = false; }
+        }
+
+        async function doLogout() {
+            await fetch('/api/auth/logout', {method:'POST'});
+            currentUser.value = null;
+        }
+
+        function onUserCmd(cmd) {
+            if (cmd === 'logout') doLogout();
+        }
+
+        // 用户管理
+        const userList = ref([]);
+        const showAddUser = ref(false);
+        const addUserForm = reactive({phone:'', password:'', name:'', role:'user'});
+        const showEditUser = ref(false);
+        const editUserForm = reactive({id:'', phone:'', password:'', name:'', role:'user'});
+
+        async function loadUsers() {
+            try { const res = await fetch('/api/users'); if (res.ok) userList.value = await res.json(); } catch(e) {}
+        }
+
+        async function doAddUser() {
+            try {
+                const res = await fetch('/api/users', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(Object.assign({}, addUserForm))});
+                if (res.ok) { ElementPlus.ElMessage.success('已创建'); showAddUser.value = false; Object.assign(addUserForm, {phone:'',password:'',name:'',role:'user'}); loadUsers(); }
+                else { const d = await res.json(); ElementPlus.ElMessage.error(d.detail || '创建失败'); }
+            } catch(e) { ElementPlus.ElMessage.error(e.message); }
+        }
+
+        function openEditUser(u) {
+            Object.assign(editUserForm, {id:u.id, phone:u.phone, password:'', name:u.name, role:u.role});
+            showEditUser.value = true;
+        }
+
+        async function doEditUser() {
+            const body = {phone: editUserForm.phone, name: editUserForm.name, role: editUserForm.role};
+            if (editUserForm.password) body.password = editUserForm.password;
+            try {
+                const res = await fetch('/api/users/' + editUserForm.id, {method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+                if (res.ok) { ElementPlus.ElMessage.success('已保存'); showEditUser.value = false; loadUsers(); }
+                else { const d = await res.json(); ElementPlus.ElMessage.error(d.detail || '保存失败'); }
+            } catch(e) { ElementPlus.ElMessage.error(e.message); }
+        }
+
+        async function toggleUserStatus(u) {
+            const newStatus = u.status === 'active' ? 'disabled' : 'active';
+            await fetch('/api/users/' + u.id, {method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify({status: newStatus})});
+            loadUsers();
+        }
+
+        async function deleteUser(id) {
+            try { await ElementPlus.ElMessageBox.confirm('确认删除此用户？'); } catch { return; }
+            await fetch('/api/users/' + id, {method:'DELETE'});
+            loadUsers();
+        }
+
         const currentPage = ref('dashboard');
         const nodes = reactive({});
         const nodeLogs = reactive({});
@@ -568,7 +773,7 @@ const app = createApp({
             completed:'已完成', failed:'异常', cancelled:'已取消',
         };
 
-        const pageTitle = computed(() => ({dashboard:'总览', nodes:'节点管理', tasks:'任务中心', data:'数据中心', settings:'系统设置'}[currentPage.value] || ''));
+        const pageTitle = computed(() => ({dashboard:'总览', nodes:'节点管理', tasks:'任务中心', data:'数据中心', users:'用户管理'}[currentPage.value] || ''));
         const nodeList = computed(() => Object.values(nodes));
         const onlineCount = computed(() => nodeList.value.filter(n => n.online).length);
         const activeCount = computed(() => nodeList.value.filter(n => n.online && n.task_status && !['idle','completed','failed','cancelled'].includes(n.task_status)).length);
@@ -815,11 +1020,21 @@ const app = createApp({
         function onMenuSelect(index) {
             currentPage.value = index;
             if (index === 'data') loadReports();
+            if (index === 'users') loadUsers();
         }
 
-        onMounted(() => { loadNodes(); loadTodayStats(); connectWS(); });
+        onMounted(async () => {
+            await checkAuth();
+            if (currentUser.value) { loadNodes(); loadTodayStats(); connectWS(); }
+        });
+        // 登录成功后加载数据
+        watch(currentUser, (u) => { if (u) { loadNodes(); loadTodayStats(); connectWS(); } });
 
         return {
+            currentUser, loginForm, loginLoading, doLogin, onUserCmd,
+            userList, showAddUser, addUserForm, doAddUser,
+            showEditUser, editUserForm, openEditUser, doEditUser,
+            toggleUserStatus, deleteUser,
             currentPage, pageTitle, nodeList, onlineCount, activeCount,
             todayStats, formatTime,
             showLogs, nodeLogs, logRefs, toggleLog,
