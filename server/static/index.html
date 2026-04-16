@@ -175,7 +175,68 @@ html, body, #app { height: 100%; margin: 0; }
 
             <!-- 报告汇总页面 -->
             <template v-if="currentPage === 'reports'">
-                <el-empty description="报告汇总功能开发中" />
+                <!-- 统计卡片 -->
+                <div style="display:flex;gap:16px;margin-bottom:20px">
+                    <el-card style="flex:1" shadow="hover">
+                        <div style="text-align:center">
+                            <div style="font-size:28px;font-weight:700;color:#409eff">{{ reportSummary.total_tasks }}</div>
+                            <div style="font-size:13px;color:#999;margin-top:4px">总任务数</div>
+                        </div>
+                    </el-card>
+                    <el-card style="flex:1" shadow="hover">
+                        <div style="text-align:center">
+                            <div style="font-size:28px;font-weight:700;color:#67c23a">{{ reportSummary.total_items }}</div>
+                            <div style="font-size:13px;color:#999;margin-top:4px">总加购商品</div>
+                        </div>
+                    </el-card>
+                    <el-card style="flex:1" shadow="hover">
+                        <div style="text-align:center">
+                            <div style="font-size:28px;font-weight:700;color:#e6a23c">{{ reportSummary.total_orders }}</div>
+                            <div style="font-size:13px;color:#999;margin-top:4px">总生成订单</div>
+                        </div>
+                    </el-card>
+                </div>
+
+                <!-- 按节点统计 -->
+                <el-card shadow="never" style="margin-bottom:20px" v-if="reportSummary.by_node && reportSummary.by_node.length > 1">
+                    <template #header><span style="font-size:14px;font-weight:600">节点统计</span></template>
+                    <el-table :data="reportSummary.by_node" size="small">
+                        <el-table-column prop="node_name" label="节点" />
+                        <el-table-column prop="tasks" label="任务数" width="100" />
+                        <el-table-column prop="items" label="加购商品" width="100" />
+                        <el-table-column prop="orders" label="生成订单" width="100" />
+                    </el-table>
+                </el-card>
+
+                <!-- 报告列表 -->
+                <el-card shadow="never">
+                    <template #header>
+                        <div style="display:flex;justify-content:space-between;align-items:center">
+                            <span style="font-size:14px;font-weight:600">任务记录</span>
+                            <el-select v-model="reportFilter" placeholder="全部节点" clearable size="small" style="width:180px" @change="loadReports">
+                                <el-option v-for="n in nodeList" :key="n.id" :label="n.name || n.id" :value="n.id" />
+                            </el-select>
+                        </div>
+                    </template>
+                    <el-table :data="reportList" size="small" v-loading="reportLoading">
+                        <el-table-column prop="created_at" label="时间" width="170" />
+                        <el-table-column prop="node_name" label="节点" width="160" />
+                        <el-table-column prop="items_added" label="加购" width="80" />
+                        <el-table-column prop="orders_created" label="订单" width="80" />
+                        <el-table-column label="异常" width="80">
+                            <template #default="{row}">
+                                <el-tag v-if="row.errors && row.errors.length" type="danger" size="small">{{ row.errors.length }}</el-tag>
+                                <span v-else style="color:#999">-</span>
+                            </template>
+                        </el-table-column>
+                        <el-table-column prop="task_id" label="任务ID" width="100">
+                            <template #default="{row}">
+                                <span style="font-size:11px;color:#999">{{ row.task_id }}</span>
+                            </template>
+                        </el-table-column>
+                    </el-table>
+                    <el-empty v-if="!reportLoading && reportList.length === 0" description="暂无记录" />
+                </el-card>
             </template>
 
         </div>
@@ -454,6 +515,26 @@ const app = createApp({
             } catch(e) { ElementPlus.ElMessage.error(e.message); }
         }
 
+        // 报告
+        const reportSummary = reactive({total_tasks:0, total_items:0, total_orders:0, by_node:[]});
+        const reportList = ref([]);
+        const reportFilter = ref('');
+        const reportLoading = ref(false);
+
+        async function loadReports() {
+            reportLoading.value = true;
+            try {
+                const params = reportFilter.value ? '?node_id=' + reportFilter.value : '';
+                const [listRes, summaryRes] = await Promise.all([
+                    fetch('/api/reports' + params),
+                    fetch('/api/reports/summary')
+                ]);
+                reportList.value = await listRes.json();
+                const s = await summaryRes.json();
+                Object.assign(reportSummary, s);
+            } catch(e) {} finally { reportLoading.value = false; }
+        }
+
         // 粘贴
         window.addEventListener('paste', (e) => {
             if (!showConfig.value) return;
@@ -467,7 +548,10 @@ const app = createApp({
             }
         }, true);
 
-        function onMenuSelect(index) { currentPage.value = index; }
+        function onMenuSelect(index) {
+            currentPage.value = index;
+            if (index === 'reports') loadReports();
+        }
 
         onMounted(() => { loadNodes(); connectWS(); });
 
@@ -480,6 +564,7 @@ const app = createApp({
             deleteNode, startTask, stopTask, approveCheckout, rejectCheckout,
             showConfig, configTitle, configForm, imageList,
             openConfig, saveConfig, onFileChange, onDrop, onSelectExisting,
+            reportSummary, reportList, reportFilter, reportLoading, loadReports,
             onMenuSelect,
         };
     }

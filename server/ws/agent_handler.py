@@ -117,7 +117,25 @@ async def agent_ws_endpoint(websocket: WebSocket):
                 logger.info(f"[{node_id}] 任务报告: 加购{payload.get('items_added', 0)}件, "
                            f"订单{payload.get('orders_created', 0)}笔")
                 await node_manager.broadcast_to_dashboards(make_message(MSG_TASK_REPORT, payload))
-                # 存储报告到数据库（后续阶段实现）
+                # 存储报告到数据库
+                try:
+                    import uuid, json
+                    report_id = str(uuid.uuid4())[:8]
+                    task_id = payload.get("task_id", "")
+                    db = await get_db()
+                    await db.execute(
+                        """INSERT INTO reports (id, task_id, node_id, items_added, orders_created, errors_json, report_json)
+                           VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                        (report_id, task_id, node_id,
+                         payload.get("items_added", 0),
+                         payload.get("orders_created", 0),
+                         json.dumps(payload.get("errors", []), ensure_ascii=False),
+                         json.dumps(payload, ensure_ascii=False))
+                    )
+                    await db.commit()
+                    await db.close()
+                except Exception as e:
+                    logger.warning(f"存储报告失败: {e}")
 
             elif msg_type == MSG_ERROR:
                 payload["node_id"] = node_id
