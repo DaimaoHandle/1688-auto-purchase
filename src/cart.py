@@ -843,10 +843,12 @@ def run_cart_filling(context, shop_page, cart_config: dict, progress_callback=No
         # 记住全店商品页 URL，后面回来用
         shop_url = shop_page.url
 
+        has_new = False
         if enter_new_product_zone(shop_page):
-            select_today_new_products(shop_page)
+            has_new = select_today_new_products(shop_page)
 
-            # 采购新品区商品（和正常采购一样的循环，只是数据源是新品区）
+        if has_new:
+            # 有今日上新，先采购新品
             added_count, local_amount = _fill_cart_from_current_page(
                 context, shop_page, cart_config, added_count, local_amount,
                 last_verified_amount, verify_interval, progress_callback, cancel_check,
@@ -858,15 +860,15 @@ def run_cart_filling(context, shop_page, cart_config: dict, progress_callback=No
                 return added_count
 
             logger.info(f"新品采购后: {added_count} 件 ¥{local_amount:.2f}，不足目标 ¥{target}，转入全部商品")
-
-            # 回到全部商品页
-            try:
-                shop_page.goto(shop_url, wait_until="domcontentloaded")
-                shop_page.wait_for_timeout(3000)
-            except Exception:
-                pass
         else:
-            logger.warning("未能进入新品专区，按正常模式采购")
+            logger.info("今日无上新或未能进入新品专区，按正常模式采购全部商品")
+
+        # 回到全部商品页
+        try:
+            shop_page.goto(shop_url, wait_until="domcontentloaded")
+            shop_page.wait_for_timeout(3000)
+        except Exception:
+            pass
 
     # 全部商品采购（正常模式直接走这里，新品模式不足时也走这里）
     added_count, local_amount = _fill_cart_from_current_page(

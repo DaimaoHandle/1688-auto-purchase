@@ -619,39 +619,27 @@ def select_today_new_products(shop_page) -> bool:
     try:
         result = shop_page.evaluate("""(todayDate) => {
             var all = document.querySelectorAll('a, div, span, li, button');
-            // 精确匹配 "X月X日" 格式的日期文字
             for (var i = 0; i < all.length; i++) {
                 var el = all[i];
                 var txt = String(el.innerText || '').trim();
-                // 精确匹配：文字就是日期，或文字以日期开头（如 "4月16日 上新"）
                 if (txt === todayDate || txt.indexOf(todayDate) === 0) {
                     var r = el.getBoundingClientRect();
                     if (r.width > 5 && r.height > 5) {
                         el.click();
-                        return {clicked: true, txt: txt, match: todayDate};
+                        return {clicked: true, txt: txt};
                     }
                 }
             }
-            // 兜底：点击左侧日期列表第一个含"月"和"日"的元素（通常是最新日期）
-            for (var j = 0; j < all.length; j++) {
-                var txt2 = String(all[j].innerText || '').trim();
-                if (txt2.indexOf('月') !== -1 && txt2.indexOf('日') !== -1 && txt2.length < 10) {
-                    var r2 = all[j].getBoundingClientRect();
-                    if (r2.width > 5 && r2.height > 5) {
-                        all[j].click();
-                        return {clicked: true, txt: txt2, match: 'first-date'};
-                    }
-                }
-            }
+            // 没找到今日日期，不兜底选其他日期
             return {clicked: false};
         }""", today_date)
 
         if result and result.get('clicked'):
             shop_page.wait_for_timeout(3000)
-            logger.info(f"已选择上新日期: {result.get('txt')} (匹配: {result.get('match')})")
+            logger.info(f"已选择今日上新: {result.get('txt')}")
             return True
         else:
-            logger.warning("未找到今日上新日期")
+            logger.info(f"今日（{today_date}）无上新商品")
             return False
     except Exception as e:
         logger.warning(f"选择上新日期失败: {e}")
