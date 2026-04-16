@@ -189,27 +189,27 @@ html, body, #app { height: 100%; margin: 0; }
 
             <!-- 节点管理页面 -->
             <template v-if="currentPage === 'nodes'">
-                <el-table :data="nodeList" stripe table-layout="auto" style="width:100%">
-                    <el-table-column prop="id" label="节点ID" />
-                    <el-table-column prop="name" label="名称" />
-                    <el-table-column prop="remark" label="备注">
+                <el-table :data="nodeList" stripe border>
+                    <el-table-column prop="id" label="节点ID" width="90" />
+                    <el-table-column prop="name" label="名称" width="150" show-overflow-tooltip />
+                    <el-table-column label="备注" width="120" show-overflow-tooltip>
                         <template #default="{row}">{{ row.remark || '-' }}</template>
                     </el-table-column>
-                    <el-table-column prop="account_1688" label="1688账号">
+                    <el-table-column label="1688账号" width="130" show-overflow-tooltip>
                         <template #default="{row}">{{ row.account_1688 || '-' }}</template>
                     </el-table-column>
-                    <el-table-column label="状态">
+                    <el-table-column label="状态" width="70">
                         <template #default="{row}">
                             <el-tag :type="row.online ? 'success' : 'info'" size="small">{{ row.online ? '在线' : '离线' }}</el-tag>
                         </template>
                     </el-table-column>
-                    <el-table-column label="任务状态">
+                    <el-table-column label="任务状态" width="100">
                         <template #default="{row}">
                             <el-tag v-if="row.task_status" :type="statusType(row)" size="small">{{ statusLabel(row) }}</el-tag>
                             <span v-else style="color:#999">-</span>
                         </template>
                     </el-table-column>
-                    <el-table-column label="操作">
+                    <el-table-column label="操作" width="140">
                         <template #default="{row}">
                             <el-button size="small" @click="openConfig(row)">配置</el-button>
                             <el-button size="small" type="danger" @click="deleteNode(row.id)">删除</el-button>
@@ -261,12 +261,12 @@ html, body, #app { height: 100%; margin: 0; }
                 <!-- 按节点统计 -->
                 <el-card shadow="never" style="margin-bottom:20px" v-if="reportSummary.by_node && reportSummary.by_node.length > 1">
                     <template #header><span style="font-size:14px;font-weight:600">节点统计</span></template>
-                    <el-table :data="reportSummary.by_node" size="small" table-layout="auto" style="width:100%">
-                        <el-table-column prop="node_name" label="节点" />
-                        <el-table-column prop="tasks" label="任务数" />
-                        <el-table-column prop="items" label="加购商品" />
-                        <el-table-column prop="orders" label="订单数" />
-                        <el-table-column label="采购金额" align="right">
+                    <el-table :data="reportSummary.by_node" size="small" border>
+                        <el-table-column prop="node_name" label="节点" width="180" />
+                        <el-table-column prop="tasks" label="任务数" width="80" />
+                        <el-table-column prop="items" label="加购商品" width="90" />
+                        <el-table-column prop="orders" label="订单数" width="80" />
+                        <el-table-column label="采购金额" width="120" align="right">
                             <template #default="{row}">¥{{ (row.amount || 0).toFixed(2) }}</template>
                         </el-table-column>
                     </el-table>
@@ -287,28 +287,28 @@ html, body, #app { height: 100%; margin: 0; }
                             </div>
                         </div>
                     </template>
-                    <el-table :data="reportList" size="small" v-loading="reportLoading" border stripe style="width:100%" table-layout="auto">
-                        <el-table-column prop="created_at" label="采购日期" />
-                        <el-table-column label="店铺">
+                    <el-table :data="reportList" size="small" v-loading="reportLoading" border stripe>
+                        <el-table-column prop="created_at" label="采购日期" width="165" />
+                        <el-table-column label="店铺" width="140" show-overflow-tooltip>
                             <template #default="{row}">{{ row.shop_name || '-' }}</template>
                         </el-table-column>
-                        <el-table-column label="操作人">
+                        <el-table-column label="操作人" width="80">
                             <template #default="{row}">{{ row.operator || '-' }}</template>
                         </el-table-column>
-                        <el-table-column label="买手信息">
+                        <el-table-column label="买手信息" width="130" show-overflow-tooltip>
                             <template #default="{row}">{{ row.buyer_info || '-' }}</template>
                         </el-table-column>
-                        <el-table-column prop="orders_created" label="订单笔数" align="center" />
-                        <el-table-column label="采购金额" align="right">
+                        <el-table-column prop="orders_created" label="订单笔数" width="80" align="center" />
+                        <el-table-column label="采购金额" width="95" align="right">
                             <template #default="{row}">
                                 <span style="color:#e6a23c;font-weight:600">{{ row.actual_amount ? '¥' + row.actual_amount.toFixed(2) : '-' }}</span>
                             </template>
                         </el-table-column>
-                        <el-table-column label="计划金额" align="right">
+                        <el-table-column label="计划金额" width="95" align="right">
                             <template #default="{row}">¥{{ (row.target_amount || 0).toFixed(2) }}</template>
                         </el-table-column>
-                        <el-table-column prop="items_added" label="加购数" align="center" />
-                        <el-table-column label="状态" align="center">
+                        <el-table-column prop="items_added" label="加购数" width="65" align="center" />
+                        <el-table-column label="状态" width="60" align="center">
                             <template #default="{row}">
                                 <el-tag v-if="row.errors && row.errors.length" type="danger" size="small">异常</el-tag>
                                 <el-tag v-else type="success" size="small">正常</el-tag>
