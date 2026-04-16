@@ -40,6 +40,11 @@ html, body, #app { height: 100%; margin: 0; }
 .upload-zone:hover { border-color: #409eff; }
 .upload-zone.uploaded { border-color: #67c23a; }
 .upload-zone img { max-height: 120px; max-width: 100%; margin-top: 8px; border-radius: 4px; }
+.report-table th { background: #fafafa; font-weight: 600; color: #606266; }
+.report-table td { color: #606266; }
+.report-table tr:hover td { background: #f5f7fa; }
+.report-table tr:nth-child(even) td { background: #fafafa; }
+.report-table tr:nth-child(even):hover td { background: #f0f2f5; }
 </style>
 </head>
 <body>
@@ -189,33 +194,42 @@ html, body, #app { height: 100%; margin: 0; }
 
             <!-- 节点管理页面 -->
             <template v-if="currentPage === 'nodes'">
-                <el-table :data="nodeList" stripe border>
-                    <el-table-column prop="id" label="节点ID" width="90" />
-                    <el-table-column prop="name" label="名称" width="150" show-overflow-tooltip />
-                    <el-table-column label="备注" width="120" show-overflow-tooltip>
-                        <template #default="{row}">{{ row.remark || '-' }}</template>
-                    </el-table-column>
-                    <el-table-column label="1688账号" width="130" show-overflow-tooltip>
-                        <template #default="{row}">{{ row.account_1688 || '-' }}</template>
-                    </el-table-column>
-                    <el-table-column label="状态" width="70">
-                        <template #default="{row}">
-                            <el-tag :type="row.online ? 'success' : 'info'" size="small">{{ row.online ? '在线' : '离线' }}</el-tag>
-                        </template>
-                    </el-table-column>
-                    <el-table-column label="任务状态" width="100">
-                        <template #default="{row}">
-                            <el-tag v-if="row.task_status" :type="statusType(row)" size="small">{{ statusLabel(row) }}</el-tag>
-                            <span v-else style="color:#999">-</span>
-                        </template>
-                    </el-table-column>
-                    <el-table-column label="操作" width="140">
-                        <template #default="{row}">
-                            <el-button size="small" @click="openConfig(row)">配置</el-button>
-                            <el-button size="small" type="danger" @click="deleteNode(row.id)">删除</el-button>
-                        </template>
-                    </el-table-column>
-                </el-table>
+                <div style="margin-bottom:16px;text-align:right">
+                    <el-button type="primary" size="small" @click="showAddNode = true">
+                        <el-icon><Plus /></el-icon> 添加节点
+                    </el-button>
+                </div>
+                <el-empty v-if="nodeList.length === 0" description="暂无节点" />
+                <div class="node-grid" v-else>
+                    <el-card v-for="n in nodeList" :key="n.id" shadow="hover" style="border-radius:8px">
+                        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">
+                            <div>
+                                <div style="font-size:16px;font-weight:600;display:flex;align-items:center;gap:8px">
+                                    <el-badge is-dot :type="n.online ? 'success' : 'danger'" />
+                                    {{ n.name || n.id }}
+                                </div>
+                                <div style="font-size:12px;color:#999;margin-top:4px">ID: {{ n.id }}</div>
+                            </div>
+                            <el-tag :type="n.online ? 'success' : 'info'" size="small">{{ n.online ? '在线' : '离线' }}</el-tag>
+                        </div>
+
+                        <div style="font-size:13px;color:#666;line-height:2">
+                            <div v-if="n.remark"><span style="color:#999">备注：</span>{{ n.remark }}</div>
+                            <div v-if="n.account_1688"><span style="color:#999">1688账号：</span>{{ n.account_1688 }}</div>
+                            <div><span style="color:#999">任务状态：</span>
+                                <el-tag v-if="n.task_status" :type="statusType(n)" size="small">{{ statusLabel(n) }}</el-tag>
+                                <span v-else style="color:#ccc">空闲</span>
+                            </div>
+                            <div v-if="n.last_heartbeat"><span style="color:#999">最近心跳：</span>{{ formatTime(n.last_heartbeat) }}</div>
+                        </div>
+
+                        <div style="margin-top:14px;display:flex;gap:6px;border-top:1px solid #f0f0f0;padding-top:12px">
+                            <el-button size="small" @click="openConfig(n)">采购配置</el-button>
+                            <el-button size="small" @click="editNodeInfo(n)">编辑信息</el-button>
+                            <el-button size="small" type="danger" @click="deleteNode(n.id)">删除</el-button>
+                        </div>
+                    </el-card>
+                </div>
             </template>
 
             <!-- 任务中心 -->
@@ -426,6 +440,45 @@ html, body, #app { height: 100%; margin: 0; }
     </template>
 </el-dialog>
 
+<!-- 编辑节点信息弹窗 -->
+<el-dialog v-model="showEditNode" title="编辑节点信息" width="520px">
+    <el-form label-width="100px">
+        <div style="font-size:13px;color:#909399;margin-bottom:12px;border-bottom:1px solid #eee;padding-bottom:6px">基本信息</div>
+        <el-form-item label="节点名称">
+            <el-input v-model="editNode.name" />
+        </el-form-item>
+        <el-form-item label="备注">
+            <el-input v-model="editNode.remark" />
+        </el-form-item>
+        <el-form-item label="1688账号">
+            <el-input v-model="editNode.account_1688" />
+        </el-form-item>
+        <div style="font-size:13px;color:#909399;margin:16px 0 12px;border-bottom:1px solid #eee;padding-bottom:6px">买手信息（用于数据统计）</div>
+        <el-form-item label="买手姓名">
+            <el-input v-model="editNode.buyer_name" />
+        </el-form-item>
+        <el-form-item label="买手号">
+            <el-input v-model="editNode.buyer_id" />
+        </el-form-item>
+        <el-form-item label="卡编号">
+            <el-input v-model="editNode.card_no" />
+        </el-form-item>
+        <el-form-item label="支付宝号码">
+            <el-input v-model="editNode.alipay_account" />
+        </el-form-item>
+        <el-form-item label="买手手机">
+            <el-input v-model="editNode.buyer_phone" />
+        </el-form-item>
+        <el-form-item label="发货地址">
+            <el-input v-model="editNode.ship_address" type="textarea" :rows="2" />
+        </el-form-item>
+    </el-form>
+    <template #footer>
+        <el-button @click="showEditNode = false">取消</el-button>
+        <el-button type="primary" @click="saveNodeInfo">保存</el-button>
+    </template>
+</el-dialog>
+
 </div>
 
 <script>
@@ -559,6 +612,44 @@ const app = createApp({
         function copyNodeResult() {
             navigator.clipboard.writeText(nodeResultJson.value);
             ElementPlus.ElMessage.success('已复制');
+        }
+
+        // 编辑节点信息
+        const showEditNode = ref(false);
+        const editNode = reactive({id:'', name:'', remark:'', account_1688:'', buyer_name:'', buyer_id:'', card_no:'', alipay_account:'', buyer_phone:'', ship_address:''});
+
+        async function editNodeInfo(n) {
+            // 从 API 加载完整信息
+            try {
+                const res = await fetch('/api/nodes/' + n.id);
+                const data = await res.json();
+                Object.assign(editNode, data);
+            } catch(e) {
+                Object.assign(editNode, n);
+            }
+            showEditNode.value = true;
+        }
+
+        async function saveNodeInfo() {
+            try {
+                const res = await fetch('/api/nodes/' + editNode.id, {
+                    method: 'PATCH',
+                    headers: {'Content-Type':'application/json'},
+                    body: JSON.stringify({
+                        name: editNode.name, remark: editNode.remark, account_1688: editNode.account_1688,
+                        buyer_name: editNode.buyer_name, buyer_id: editNode.buyer_id, card_no: editNode.card_no,
+                        alipay_account: editNode.alipay_account, buyer_phone: editNode.buyer_phone, ship_address: editNode.ship_address,
+                    })
+                });
+                if (res.ok) {
+                    ElementPlus.ElMessage.success('已保存');
+                    showEditNode.value = false;
+                    loadNodes();
+                } else {
+                    const d = await res.json();
+                    ElementPlus.ElMessage.error(d.detail || '保存失败');
+                }
+            } catch(e) { ElementPlus.ElMessage.error(e.message); }
         }
 
         async function deleteNode(id) {
@@ -698,6 +789,7 @@ const app = createApp({
             statusLabel, statusType, progressPct,
             showAddNode, newNode, addNode,
             showNodeResult, nodeResultJson, copyNodeResult,
+            showEditNode, editNode, editNodeInfo, saveNodeInfo,
             deleteNode, startTask, stopTask, approveCheckout, rejectCheckout,
             showConfig, configTitle, configForm, imageList,
             openConfig, saveConfig, onFileChange, onDrop, onSelectExisting,
