@@ -96,7 +96,7 @@ html, body, #app { height: 100%; margin: 0; }
                 <span>任务中心</span>
             </el-menu-item>
             <el-menu-item index="data">
-                <el-icon><DataAnalysis /></el-icon>
+                <el-icon><Histogram /></el-icon>
                 <span>数据中心</span>
             </el-menu-item>
             <el-sub-menu index="settings">
@@ -178,7 +178,7 @@ html, body, #app { height: 100%; margin: 0; }
                         </div>
                     </template>
                     <el-empty v-if="nodeList.length === 0" description="暂无节点，请先添加" />
-                    <div class="node-grid" v-else>
+                    <div class="node-grid" v-if="nodeList.length > 0">
                         <el-card class="node-card" v-for="n in nodeList" :key="n.id" shadow="hover">
                             <div class="card-header">
                                 <div class="name">
@@ -242,7 +242,7 @@ html, body, #app { height: 100%; margin: 0; }
                     </el-button>
                 </div>
                 <el-empty v-if="nodeList.length === 0" description="暂无节点" />
-                <div class="node-grid" v-else>
+                <div class="node-grid" v-if="nodeList.length > 0">
                     <el-card v-for="n in nodeList" :key="n.id" shadow="hover" style="border-radius:10px">
                         <!-- 顶部：名称 + 节点状态 -->
                         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
@@ -280,20 +280,20 @@ html, body, #app { height: 100%; margin: 0; }
                         <!-- 操作按钮 -->
                         <div style="margin-top:14px;display:flex;gap:6px;border-top:1px solid #eee;padding-top:12px;flex-wrap:wrap">
                             <el-button size="small" @click="editNodeInfo(n)">
-                                <el-icon><View /></el-icon> 详情
+                                详情
                             </el-button>
                             <el-button size="small" @click="openConfig(n)">
                                 <el-icon><Setting /></el-icon> 采购配置
                             </el-button>
                             <template v-if="n.online">
                                 <el-button v-if="!n.task_status || ['idle','completed','failed','cancelled'].includes(n.task_status)" type="success" size="small" @click="startTask(n.id)">
-                                    <el-icon><CaretRight /></el-icon> 启动
+                                    启动
                                 </el-button>
                                 <el-button v-else-if="n.task_status === 'awaiting_approval'" type="warning" size="small" @click="approveCheckout(n.task_id)">
                                     确认结算
                                 </el-button>
                                 <el-button v-else type="danger" size="small" @click="stopTask(n.id)">
-                                    <el-icon><VideoPause /></el-icon> 停止
+                                    停止
                                 </el-button>
                             </template>
                             <el-button size="small" :type="showLogs[n.id] ? 'primary' : ''" @click="toggleLog(n.id)" plain>
@@ -519,7 +519,7 @@ html, body, #app { height: 100%; margin: 0; }
                     <img :src="configForm.imagePreview" />
                 </template>
                 <template v-else>
-                    <el-icon :size="32" color="#c0c4cc"><UploadFilled /></el-icon>
+                    <span style="font-size:28px;color:#c0c4cc">+</span>
                     <p style="color:#909399;font-size:13px;margin:8px 0 0">点击上传 / Ctrl+V 粘贴 / 拖拽图片</p>
                 </template>
             </div>
