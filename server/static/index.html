@@ -287,34 +287,42 @@ html, body, #app { height: 100%; margin: 0; }
                             </div>
                         </div>
                     </template>
-                    <el-table :data="reportList" size="small" v-loading="reportLoading" border stripe>
-                        <el-table-column prop="created_at" label="采购日期" width="165" />
-                        <el-table-column label="店铺" width="140" show-overflow-tooltip>
-                            <template #default="{row}">{{ row.shop_name || '-' }}</template>
-                        </el-table-column>
-                        <el-table-column label="操作人" width="80">
-                            <template #default="{row}">{{ row.operator || '-' }}</template>
-                        </el-table-column>
-                        <el-table-column label="买手信息" width="130" show-overflow-tooltip>
-                            <template #default="{row}">{{ row.buyer_info || '-' }}</template>
-                        </el-table-column>
-                        <el-table-column prop="orders_created" label="订单笔数" width="80" align="center" />
-                        <el-table-column label="采购金额" width="95" align="right">
-                            <template #default="{row}">
-                                <span style="color:#e6a23c;font-weight:600">{{ row.actual_amount ? '¥' + row.actual_amount.toFixed(2) : '-' }}</span>
-                            </template>
-                        </el-table-column>
-                        <el-table-column label="计划金额" width="95" align="right">
-                            <template #default="{row}">¥{{ (row.target_amount || 0).toFixed(2) }}</template>
-                        </el-table-column>
-                        <el-table-column prop="items_added" label="加购数" width="65" align="center" />
-                        <el-table-column label="状态" width="60" align="center">
-                            <template #default="{row}">
-                                <el-tag v-if="row.errors && row.errors.length" type="danger" size="small">异常</el-tag>
-                                <el-tag v-else type="success" size="small">正常</el-tag>
-                            </template>
-                        </el-table-column>
-                    </el-table>
+                    <div style="overflow-x:auto">
+                    <table class="report-table" style="width:100%;border-collapse:collapse;font-size:13px">
+                        <thead>
+                            <tr style="background:#fafafa;border-bottom:2px solid #ebeef5">
+                                <th style="padding:10px 12px;text-align:left;white-space:nowrap">采购日期</th>
+                                <th style="padding:10px 12px;text-align:left;white-space:nowrap">店铺</th>
+                                <th style="padding:10px 12px;text-align:left;white-space:nowrap">操作人</th>
+                                <th style="padding:10px 12px;text-align:left;white-space:nowrap">买手信息</th>
+                                <th style="padding:10px 12px;text-align:center;white-space:nowrap">订单笔数</th>
+                                <th style="padding:10px 12px;text-align:right;white-space:nowrap">采购金额</th>
+                                <th style="padding:10px 12px;text-align:right;white-space:nowrap">计划金额</th>
+                                <th style="padding:10px 12px;text-align:center;white-space:nowrap">加购数</th>
+                                <th style="padding:10px 12px;text-align:center;white-space:nowrap">状态</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="row in reportList" :key="row.id" style="border-bottom:1px solid #ebeef5">
+                                <td style="padding:8px 12px;white-space:nowrap">{{ row.created_at }}</td>
+                                <td style="padding:8px 12px">{{ row.shop_name || '-' }}</td>
+                                <td style="padding:8px 12px">{{ row.operator || '-' }}</td>
+                                <td style="padding:8px 12px">{{ row.buyer_info || '-' }}</td>
+                                <td style="padding:8px 12px;text-align:center">{{ row.orders_created }}</td>
+                                <td style="padding:8px 12px;text-align:right;color:#e6a23c;font-weight:600">{{ row.actual_amount ? '¥' + row.actual_amount.toFixed(2) : '-' }}</td>
+                                <td style="padding:8px 12px;text-align:right">¥{{ (row.target_amount || 0).toFixed(2) }}</td>
+                                <td style="padding:8px 12px;text-align:center">{{ row.items_added }}</td>
+                                <td style="padding:8px 12px;text-align:center">
+                                    <el-tag v-if="row.errors && row.errors.length" type="danger" size="small">异常</el-tag>
+                                    <el-tag v-else type="success" size="small">正常</el-tag>
+                                </td>
+                            </tr>
+                            <tr v-if="reportList.length === 0">
+                                <td colspan="9" style="padding:40px;text-align:center;color:#999">暂无采购记录</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    </div>
                     <el-empty v-if="!reportLoading && reportList.length === 0" description="暂无采购记录" />
                 </el-card>
             </template>
