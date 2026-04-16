@@ -350,29 +350,32 @@ def _send_message_to_service(context, detail_page):
                 logger.warning("客服未在新标签打开，跳过发消息")
                 return
 
-        # 在客服页面找到输入框并发送消息
+        # 在客服页面找到输入框并发送消息（等待页面渲染，最多 15 秒）
         try:
-            sent = chat_page.evaluate("""() => {
-                // 找输入框（textarea 或 contenteditable 的 div）
-                var inputs = document.querySelectorAll('textarea, [contenteditable="true"], input[type="text"]');
-                for (var i = 0; i < inputs.length; i++) {
-                    var el = inputs[i];
-                    var r = el.getBoundingClientRect();
-                    if (r.width > 100 && r.height > 20) {
-                        // 聚焦并输入
-                        el.focus();
-                        if (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT') {
-                            el.value = '今天能发货吗';
-                            el.dispatchEvent(new Event('input', {bubbles: true}));
-                        } else {
-                            el.innerText = '今天能发货吗';
-                            el.dispatchEvent(new Event('input', {bubbles: true}));
+            sent = None
+            for _wait in range(8):
+                sent = chat_page.evaluate("""() => {
+                    var inputs = document.querySelectorAll('textarea, [contenteditable="true"], input[type="text"]');
+                    for (var i = 0; i < inputs.length; i++) {
+                        var el = inputs[i];
+                        var r = el.getBoundingClientRect();
+                        if (r.width > 100 && r.height > 20) {
+                            el.focus();
+                            if (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT') {
+                                el.value = '今天能发货吗';
+                                el.dispatchEvent(new Event('input', {bubbles: true}));
+                            } else {
+                                el.innerText = '今天能发货吗';
+                                el.dispatchEvent(new Event('input', {bubbles: true}));
+                            }
+                            return {found: true, tag: el.tagName};
                         }
-                        return {found: true, tag: el.tagName};
                     }
-                }
-                return {found: false};
-            }""")
+                    return {found: false};
+                }""")
+                if sent and sent.get('found'):
+                    break
+                chat_page.wait_for_timeout(2000)
 
             if sent and sent.get('found'):
                 chat_page.wait_for_timeout(500)
