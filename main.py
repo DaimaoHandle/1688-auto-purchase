@@ -13,7 +13,7 @@ from src.browser import init_browser
 from src.login import wait_for_login
 from src.search import image_search
 from src.shop import find_shop_and_enter
-from src.cart import run_cart_filling, run_cart_checkout
+from src.cart import run_cart_filling, run_cart_checkout, capture_cart_url, set_cart_url
 
 
 def main():
@@ -33,6 +33,13 @@ def main():
         # 等待用户登录
         login_timeout = config.get("timeouts", {}).get("login_wait", 120000)
         wait_for_login(page, timeout_ms=login_timeout)
+
+        # 登录后从首页获取采购车 URL（后续所有采购车操作都用此 URL 打开新标签）
+        cart_url = capture_cart_url(page)
+        if cart_url:
+            set_cart_url(cart_url)
+        else:
+            logger.warning("未能获取采购车URL，结算功能可能不可用")
 
         # 搜图
         image_path = config["search"]["image_path"]
@@ -62,10 +69,9 @@ def main():
                 print("  请输入 y 或 n")
 
         # 结算：分组下单，每单不超过 500 元（预留运费空间）
-        # 复用 shop_page（已在 1688 页面上，可通过采购车按钮跳转）
         order_limit = config.get("cart", {}).get("order_limit", 500)
         shipping_reserve = config.get("cart", {}).get("shipping_reserve", 15)
-        orders = run_cart_checkout(context, shop_page, order_limit=order_limit, shipping_reserve=shipping_reserve)
+        orders = run_cart_checkout(context, order_limit=order_limit, shipping_reserve=shipping_reserve)
 
         logger.info("=" * 60)
         logger.info(f"任务完成！共加入 {added} 件商品，生成 {orders} 笔订单")

@@ -125,65 +125,65 @@ def _confirm_popup(page):
     return False
 
 
-def _navigate_to_cart(page) -> bool:
+def capture_cart_url(page) -> str:
     """
-    通过点击页面右上角的采购车按钮跳转到采购车页面。
-    直接 goto cart.1688.com 会被 404，必须通过页面上的链接点击跳转。
+    在 1688 首页（登录后）获取采购车链接的完整 URL。
+    需要在搜图之前调用，此时页面还在首页，采购车按钮可见。
+    返回采购车 URL 字符串，失败返回空字符串。
     """
-    # 先确保在 1688 页面上（采购车按钮只有在 1688 页面才有）
-    current_url = page.url
-    if '1688.com' not in current_url:
-        try:
-            page.goto("https://www.1688.com", wait_until="domcontentloaded")
-            page.wait_for_timeout(3000)
-        except Exception:
-            pass
+    # 点击采购车按钮，捕获新标签页的 URL，然后关闭该标签
+    coord = _find_cart_link(page)
+    if not coord or not coord.get('href'):
+        logger.warning("首页未找到采购车链接")
+        return ""
 
-    # 在页面中找到采购车链接并点击
-    # 如果当前页找不到（如全店商品页），先跳转到 1688 首页再找
-    for attempt in range(2):
-        coord = _find_cart_link(page)
-        if coord:
-            break
-        if attempt == 0:
-            logger.info("当前页未找到采购车链接，先跳转到 1688 首页...")
-            try:
-                page.goto("https://www.1688.com", wait_until="domcontentloaded")
-                page.wait_for_timeout(3000)
-            except Exception:
-                pass
+    logger.info(f"获取采购车URL: 点击 \"{coord['txt']}\" href={coord['href']}")
+    try:
+        with page.context.expect_page(timeout=10000) as new_page_info:
+            page.mouse.click(coord['x'], coord['y'])
+        cart_page = new_page_info.value
+        cart_page.wait_for_load_state("domcontentloaded")
+        cart_page.wait_for_timeout(2000)
+        cart_url = cart_page.url
+        logger.info(f"采购车URL已获取: {cart_url}")
+        # 关闭采购车标签，回到首页
+        cart_page.close()
+        return cart_url
+    except Exception as e:
+        logger.warning(f"获取采购车URL失败: {e}")
+        return ""
 
-    if not coord:
-        logger.warning("1688 首页也未找到采购车链接")
-        logger.error("无法打开采购车页面")
+
+# 模块级变量，存储采购车 URL（由 main.py 在启动时设置）
+_cart_url = ""
+
+
+def set_cart_url(url: str):
+    """设置采购车 URL（由 main.py 调用）。"""
+    global _cart_url
+    _cart_url = url
+    logger.info(f"采购车URL已设置: {url}")
+
+
+def _open_cart_in_new_tab(context):
+    """用已保存的采购车 URL 在新标签页中打开采购车。"""
+    if not _cart_url:
+        logger.error("采购车URL未设置，无法打开")
         return None
 
     try:
-        logger.info(f"找到采购车链接: \"{coord['txt']}\" href={coord['href']} 坐标({coord['x']:.0f},{coord['y']:.0f})")
-        # 采购车链接会在新标签页打开，用 expect_page 捕获
-        try:
-            with page.context.expect_page(timeout=10000) as new_page_info:
-                page.mouse.click(coord['x'], coord['y'])
-            cart_page = new_page_info.value
-            cart_page.wait_for_load_state("domcontentloaded")
-            cart_page.wait_for_timeout(3000)
-            if 'cart' in cart_page.url and '1688' in cart_page.url:
-                logger.info(f"采购车页面已打开（新标签）: {cart_page.url}")
-                return cart_page
-        except Exception:
-            pass
-
-        # 兜底：也许是当前页跳转
-        page.wait_for_timeout(3000)
-        if 'cart' in page.url and '1688' in page.url:
-            logger.info(f"采购车页面已打开（当前页）: {page.url}")
-            return page
-
-        logger.warning(f"点击后未打开采购车，当前URL: {page.url}")
+        cart_page = context.new_page()
+        cart_page.goto(_cart_url, wait_until="domcontentloaded")
+        cart_page.wait_for_timeout(3000)
+        if 'cart' in cart_page.url and '1688' in cart_page.url:
+            logger.info(f"采购车已打开（新标签）: {cart_page.url}")
+            return cart_page
+        else:
+            logger.warning(f"采购车URL跳转异常: {cart_page.url}")
+            cart_page.close()
     except Exception as e:
         logger.warning(f"打开采购车失败: {e}")
 
-    logger.error("无法打开采购车页面")
     return None
 
 
@@ -256,86 +256,45 @@ def _get_detail_page_price(detail_page) -> float:
         return 0.0
 
 
-def verify_cart_amount(source_page) -> tuple:
+def verify_cart_amount(context) -> tuple:
     """
-    通过 source_page 上的采购车按钮打开采购车，勾选所有商品，读取收银台总金额。
-    返回 (金额, cart_page对象)。cart_page 用完后由调用方关闭。
-    金额 <= 0 表示失败。
+    打开采购车新标签 → 用鼠标点击全选 → 读取收银台总金额 → 关闭标签。
+    返回 (金额, 是否成功)。金额 <= 0 表示失败。
+    不影响当前页面。
     """
     logger.info("--- 开始校准采购车金额 ---")
 
-    # 1. 打开采购车页面（通过页面按钮跳转，会打开新标签）
-    cart_page = _navigate_to_cart(source_page)
+    # 1. 用已保存的 URL 在新标签打开采购车
+    cart_page = _open_cart_in_new_tab(context)
     if not cart_page:
-        logger.warning("无法打开采购车页面")
-        return -1.0, None
+        return -1.0, False
 
-    # 2. 勾选全部商品（点击"全选"复选框）
     try:
-        cart_page.evaluate("""() => {
-            // 找"全选"复选框或按钮
-            const selectors = [
-                'label:has-text("全选")',
-                'input[type="checkbox"][class*="all"]',
-                '[class*="checkAll"]',
-                '[class*="check-all"]',
-                '[class*="selectAll"]',
-                '[class*="select-all"]',
-            ];
-            for (const sel of selectors) {
-                const el = document.querySelector(sel);
-                if (el) {
-                    // 如果是 label，找内部的 checkbox
-                    const cb = el.querySelector('input[type="checkbox"]') || el;
-                    if (cb.checked === false || !cb.classList.contains('checked')) {
-                        cb.click();
-                        return true;
-                    }
-                    return true;  // 已经是勾选状态
-                }
-            }
-            // 兜底：找所有包含"全选"文字的可点击元素
-            for (const el of document.querySelectorAll('*')) {
-                const txt = (el.innerText || '').trim();
-                if (txt === '全选' || txt === '全 选') {
-                    el.click();
-                    return true;
-                }
-            }
-            return false;
-        }""")
-        cart_page.wait_for_timeout(1500)
-        logger.info("已点击全选")
-    except Exception as e:
-        logger.warning(f"勾选全部商品失败: {e}")
+        # 2. 用真实鼠标点击"全选"
+        _uncheck_all(cart_page)  # 先确保取消全选
+        cart_page.wait_for_timeout(500)
+        coord = _mouse_click_select_all(cart_page)
+        if coord:
+            cart_page.mouse.click(coord['x'], coord['y'])
+            cart_page.wait_for_timeout(2000)
+            logger.info("已鼠标点击全选")
+        else:
+            logger.warning("未找到全选按钮")
 
-    # 3. 读取收银台总金额
-    try:
-        result = cart_page.evaluate("""() => {
-            // 收银台关键词
-            const keywords = ['合计', '总计', '结算金额', '应付金额', '商品金额', '总价'];
-            for (const el of document.querySelectorAll('*')) {
-                const txt = (el.innerText || '').trim();
-                if (!txt || txt.length > 150) continue;
-                for (const kw of keywords) {
-                    if (!txt.includes(kw)) continue;
-                    const m = txt.match(/[¥￥]([\d,]+\.?\d*)/);
-                    if (m) {
-                        const v = parseFloat(m[1].replace(/,/g, ''));
-                        if (v > 0) return v;
-                    }
-                }
-            }
-            return 0;
-        }""")
-        if result and result > 0:
-            logger.info(f"采购车校准金额: ¥{result:.2f}")
-            return float(result), cart_page
-    except Exception as e:
-        logger.debug(f"读取收银台金额失败: {e}")
-
-    logger.warning("未能读取采购车收银台金额")
-    return -1.0, cart_page
+        # 3. 读取收银台总金额
+        amount = _read_bottom_bar_amount(cart_page)
+        if amount > 0:
+            logger.info(f"采购车校准金额: ¥{amount:.2f}")
+            return amount, True
+        else:
+            logger.warning("未能读取采购车收银台金额")
+            return -1.0, False
+    finally:
+        # 关闭采购车标签，不影响其他页面
+        try:
+            cart_page.close()
+        except Exception:
+            pass
 
 
 def _open_item_detail(context, item_el, shop_page):
@@ -755,7 +714,7 @@ def run_cart_filling(context, shop_page, cart_config: dict):
 
     金额追踪策略：
     - 程序本地累加每次加购的商品价格（local_amount）
-    - 每累计接近 ¥500 时，临时打开采购车页面校准实际总金额
+    - 每累计约 ¥500 时，在新标签页打开采购车全选读取实际金额校准（不影响当前店铺页）
     - 当采购车总金额接近目标金额时停止
     """
     target = cart_config.get("target_amount", 10000)
@@ -806,23 +765,17 @@ def run_cart_filling(context, shop_page, cart_config: dict):
                 logger.info(f"[{added_count}] 已加入采购车 | 商品价格: ¥{item_price:.2f} | 本地累计: ¥{local_amount:.2f} / ¥{target}")
                 print(f"  已加入 {added_count} 件 | 商品价格: ¥{item_price:.2f} | 累计: ¥{local_amount:.2f} / 目标: ¥{target}")
 
-            # 定期校准：通过 shop_page 上的采购车按钮打开采购车（新标签），读取金额后关闭
+            # 定期校准：新标签页打开采购车读取实际金额，不影响当前店铺页
             if local_amount - last_verified_amount >= verify_interval:
                 logger.info(f"本地累计已增长 ¥{local_amount - last_verified_amount:.2f}，触发采购车校准")
-                real_amount, cart_page = verify_cart_amount(shop_page)
-                if real_amount > 0:
+                real_amount, success = verify_cart_amount(context)
+                if success and real_amount > 0:
                     logger.info(f"校准: 本地记录 ¥{local_amount:.2f} → 采购车实际 ¥{real_amount:.2f}")
                     local_amount = real_amount
                     last_verified_amount = real_amount
                 else:
                     logger.warning("校准失败，继续使用本地累计金额")
                     last_verified_amount = local_amount
-                # 关闭采购车标签页（如果是新开的）
-                if cart_page and cart_page != shop_page:
-                    try:
-                        cart_page.close()
-                    except Exception:
-                        pass
 
                 if local_amount >= target:
                     logger.info(f"校准后金额 ¥{local_amount:.2f} 已达目标 ¥{target}，停止")
@@ -837,20 +790,6 @@ def run_cart_filling(context, shop_page, cart_config: dict):
             break
         page_num += 1
         random_delay(1.5, 3.0)
-
-    # 结束前做最后一次校准
-    try:
-        final_amount, cart_page = verify_cart_amount(shop_page)
-        if final_amount > 0:
-            logger.info(f"最终采购车金额: ¥{final_amount:.2f}")
-            print(f"\n  最终采购车金额: ¥{final_amount:.2f}")
-        if cart_page and cart_page != shop_page:
-            try:
-                cart_page.close()
-            except Exception:
-                pass
-    except Exception:
-        pass
 
     logger.info(f"采购车填充完成，共加入 {added_count} 件商品，本地累计: ¥{local_amount:.2f}")
     return added_count
@@ -1278,14 +1217,14 @@ def _select_group_by_mouse(cart_page, group_indices: list):
     return clicked
 
 
-def run_cart_checkout(context, source_page, order_limit: float = 500.0, shipping_reserve: float = 15.0):
+def run_cart_checkout(context, order_limit: float = 500.0, shipping_reserve: float = 15.0):
     """
     采购车结算：预读价格 → 贪心分组 → 每组鼠标勾选 → 结算 → 提交订单。
 
-    source_page: 任意 1688 页面（用于点击采购车按钮打开采购车）。
+    通过已保存的采购车 URL 在新标签页中打开采购车，不影响其他页面。
 
     流程：
-    1. 通过 source_page 打开采购车页面（新标签）
+    1. 通过已保存的采购车 URL 打开新标签页
     2. 读取所有商品小计价格，贪心分组（每组 ≤ order_limit，尽量接近）
     3. 对每组：取消全选 → 鼠标逐个勾选本组商品 → 读取收银台确认 → 结算 → 提交
     4. 返回采购车处理下一组，直到全部结算
@@ -1297,7 +1236,7 @@ def run_cart_checkout(context, source_page, order_limit: float = 500.0, shipping
     logger.info("=" * 60)
 
     # 1. 打开采购车
-    cart_page = _navigate_to_cart(source_page)
+    cart_page = _open_cart_in_new_tab(context)
     if not cart_page:
         logger.error("无法打开采购车页面")
         return 0
@@ -1336,11 +1275,11 @@ def run_cart_checkout(context, source_page, order_limit: float = 500.0, shipping
 
         # 确保在采购车页面（第一组已经在了，后续组需要重新打开）
         if i > 0:
-            new_cart = _navigate_to_cart(source_page)
+            new_cart = _open_cart_in_new_tab(context)
             if not new_cart:
                 logger.warning("返回采购车失败，停止结算")
                 break
-            if cart_page != source_page and cart_page != new_cart:
+            if cart_page and cart_page != new_cart:
                 try:
                     cart_page.close()
                 except Exception:
@@ -1420,7 +1359,7 @@ def run_cart_checkout(context, source_page, order_limit: float = 500.0, shipping
         random_delay(1.0, 2.0)
 
     # 关闭采购车标签页
-    if cart_page and cart_page != source_page:
+    if cart_page:
         try:
             cart_page.close()
         except Exception:
