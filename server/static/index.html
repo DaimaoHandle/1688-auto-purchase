@@ -250,30 +250,28 @@ html, body, #app { height: 100%; margin: 0; }
                             </div>
                         </div>
                     </template>
-                    <el-table :data="reportList" size="small" v-loading="reportLoading" border stripe>
-                        <el-table-column prop="created_at" label="采购日期" width="170" />
-                        <el-table-column prop="shop_name" label="店铺" min-width="160">
+                    <el-table :data="reportList" size="small" v-loading="reportLoading" border stripe style="width:100%" table-layout="auto">
+                        <el-table-column prop="created_at" label="采购日期" min-width="150" />
+                        <el-table-column label="店铺" min-width="120">
                             <template #default="{row}">{{ row.shop_name || '-' }}</template>
                         </el-table-column>
-                        <el-table-column prop="operator" label="操作人" width="100">
+                        <el-table-column label="操作人" min-width="80">
                             <template #default="{row}">{{ row.operator || '-' }}</template>
                         </el-table-column>
-                        <el-table-column prop="buyer_info" label="买手信息" width="160">
+                        <el-table-column label="买手信息" min-width="120">
                             <template #default="{row}">{{ row.buyer_info || '-' }}</template>
                         </el-table-column>
-                        <el-table-column prop="orders_created" label="订单笔数" width="90" align="center" />
-                        <el-table-column label="采购金额" width="100" align="right">
+                        <el-table-column prop="orders_created" label="订单笔数" min-width="70" align="center" />
+                        <el-table-column label="采购金额" min-width="90" align="right">
                             <template #default="{row}">
                                 <span style="color:#e6a23c;font-weight:600">{{ row.actual_amount ? '\u00a5' + row.actual_amount.toFixed(2) : '-' }}</span>
                             </template>
                         </el-table-column>
-                        <el-table-column label="计划金额" width="100" align="right">
-                            <template #default="{row}">
-                                <span>\u00a5{{ (row.target_amount || 0).toFixed(2) }}</span>
-                            </template>
+                        <el-table-column label="计划金额" min-width="90" align="right">
+                            <template #default="{row}">\u00a5{{ (row.target_amount || 0).toFixed(2) }}</template>
                         </el-table-column>
-                        <el-table-column prop="items_added" label="加购数" width="70" align="center" />
-                        <el-table-column label="状态" width="70" align="center">
+                        <el-table-column prop="items_added" label="加购数" min-width="60" align="center" />
+                        <el-table-column label="状态" min-width="60" align="center">
                             <template #default="{row}">
                                 <el-tag v-if="row.errors && row.errors.length" type="danger" size="small">异常</el-tag>
                                 <el-tag v-else type="success" size="small">正常</el-tag>
