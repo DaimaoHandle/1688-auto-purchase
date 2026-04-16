@@ -863,8 +863,19 @@ const app = createApp({
         }
 
         function copyNodeResult() {
-            navigator.clipboard.writeText(nodeResultJson.value);
-            ElementPlus.ElMessage.success('已复制');
+            try {
+                const ta = document.createElement('textarea');
+                ta.value = nodeResultJson.value;
+                ta.style.position = 'fixed';
+                ta.style.opacity = '0';
+                document.body.appendChild(ta);
+                ta.select();
+                document.execCommand('copy');
+                document.body.removeChild(ta);
+                ElementPlus.ElMessage.success('已复制到剪贴板');
+            } catch(e) {
+                ElementPlus.ElMessage.warning('复制失败，请手动选择复制');
+            }
         }
 
         // 编辑节点信息
