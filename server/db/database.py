@@ -9,11 +9,19 @@ _DB_PATH = os.path.join(_DB_DIR, "server.db")
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS nodes (
-    id          TEXT PRIMARY KEY,
-    name        TEXT NOT NULL DEFAULT '',
-    token       TEXT NOT NULL,
-    created_at  TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+    id              TEXT PRIMARY KEY,
+    name            TEXT NOT NULL DEFAULT '',
+    token           TEXT NOT NULL,
+    remark          TEXT NOT NULL DEFAULT '',
+    account_1688    TEXT NOT NULL DEFAULT '',
+    buyer_name      TEXT NOT NULL DEFAULT '',
+    buyer_id        TEXT NOT NULL DEFAULT '',
+    card_no         TEXT NOT NULL DEFAULT '',
+    alipay_account  TEXT NOT NULL DEFAULT '',
+    buyer_phone     TEXT NOT NULL DEFAULT '',
+    ship_address    TEXT NOT NULL DEFAULT '',
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 CREATE TABLE IF NOT EXISTS node_configs (

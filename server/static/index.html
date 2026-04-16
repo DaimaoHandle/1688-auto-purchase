@@ -90,66 +90,101 @@ html, body, #app { height: 100%; margin: 0; }
         <!-- 内容区 -->
         <div class="content">
 
-            <!-- 控制台页面 -->
+            <!-- 总览页面 -->
             <template v-if="currentPage === 'dashboard'">
-                <div style="margin-bottom: 16px; text-align: right">
-                    <el-button type="primary" @click="showAddNode = true">
-                        <el-icon><Plus /></el-icon> 添加节点
-                    </el-button>
-                </div>
-                <el-empty v-if="nodeList.length === 0" description="暂无节点，请先添加"></el-empty>
-                <div class="node-grid" v-else>
-                    <el-card class="node-card" v-for="n in nodeList" :key="n.id" shadow="hover">
-                        <div class="card-header">
-                            <div class="name">
-                                <el-badge is-dot :type="n.online ? 'success' : 'danger'" />
-                                {{ n.name || n.id }}
-                            </div>
-                            <div class="id">{{ n.id }}</div>
-                        </div>
-
-                        <el-tag :type="statusType(n)" size="small" style="margin-top: 10px">
-                            {{ statusLabel(n) }}
-                        </el-tag>
-
-                        <!-- 进度 -->
-                        <div class="progress-section" v-if="n.task_progress && n.task_status === 'filling_cart'">
-                            <div class="progress-label">
-                                <span>已加购 {{ n.task_progress.items_added || 0 }} 件</span>
-                                <span>¥{{ (n.task_progress.local_amount || 0).toFixed(2) }} / ¥{{ n.task_progress.target_amount || 0 }}</span>
-                            </div>
-                            <el-progress :percentage="progressPct(n)" :show-text="false" :stroke-width="8" />
-                        </div>
-
-                        <!-- 操作按钮 -->
-                        <div style="margin-top: 14px; display: flex; gap: 6px; flex-wrap: wrap">
-                            <el-button size="small" @click="openConfig(n)">配置</el-button>
-                            <template v-if="!n.online">
-                                <el-tag type="info" size="small">离线</el-tag>
-                            </template>
-                            <template v-else-if="!n.task_status || ['idle','completed','failed','cancelled'].includes(n.task_status)">
-                                <el-button type="success" size="small" @click="startTask(n.id)">启动</el-button>
-                            </template>
-                            <template v-else-if="n.task_status === 'awaiting_approval'">
-                                <el-button type="success" size="small" @click="approveCheckout(n.task_id)">确认结算</el-button>
-                                <el-button type="danger" size="small" @click="rejectCheckout(n.task_id)">取消结算</el-button>
-                            </template>
-                            <template v-else>
-                                <el-button type="danger" size="small" @click="stopTask(n.id)">停止</el-button>
-                            </template>
-                            <el-button size="small" :type="showLogs[n.id] ? 'primary' : ''" @click="toggleLog(n.id)" plain>
-                                日志
-                            </el-button>
-                        </div>
-
-                        <!-- 日志面板 -->
-                        <div class="log-box" v-if="showLogs[n.id]" :ref="el => logRefs[n.id] = el">
-                            <div class="log-line" :class="l.level" v-for="(l, i) in (nodeLogs[n.id] || []).slice(-100)" :key="i">
-                                {{ l.message }}
-                            </div>
-                        </div>
+                <!-- 顶部统计卡片 -->
+                <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-bottom:20px">
+                    <el-card shadow="hover" body-style="padding:16px;text-align:center">
+                        <div style="font-size:26px;font-weight:700;color:#409eff">{{ nodeList.length }}</div>
+                        <div style="font-size:12px;color:#999;margin-top:4px">节点总数</div>
+                    </el-card>
+                    <el-card shadow="hover" body-style="padding:16px;text-align:center">
+                        <div style="font-size:26px;font-weight:700;color:#67c23a">{{ onlineCount }}</div>
+                        <div style="font-size:12px;color:#999;margin-top:4px">在线节点</div>
+                    </el-card>
+                    <el-card shadow="hover" body-style="padding:16px;text-align:center">
+                        <div style="font-size:26px;font-weight:700;color:#e6a23c">{{ activeCount }}</div>
+                        <div style="font-size:12px;color:#999;margin-top:4px">运行中</div>
+                    </el-card>
+                    <el-card shadow="hover" body-style="padding:16px;text-align:center">
+                        <div style="font-size:26px;font-weight:700;color:#67c23a">{{ todayStats.today_success }}</div>
+                        <div style="font-size:12px;color:#999;margin-top:4px">今日成功</div>
+                    </el-card>
+                    <el-card shadow="hover" body-style="padding:16px;text-align:center">
+                        <div style="font-size:26px;font-weight:700;color:#f56c6c">{{ todayStats.today_failed }}</div>
+                        <div style="font-size:12px;color:#999;margin-top:4px">今日失败</div>
+                    </el-card>
+                    <el-card shadow="hover" body-style="padding:16px;text-align:center">
+                        <div style="font-size:22px;font-weight:700;color:#f56c6c">&yen;{{ (todayStats.today_amount || 0).toFixed(2) }}</div>
+                        <div style="font-size:12px;color:#999;margin-top:4px">今日采购额</div>
                     </el-card>
                 </div>
+
+                <!-- 节点状态概览 -->
+                <el-card shadow="never">
+                    <template #header>
+                        <div style="display:flex;justify-content:space-between;align-items:center">
+                            <span style="font-size:14px;font-weight:600">节点状态</span>
+                            <el-button type="primary" size="small" @click="showAddNode = true">
+                                <el-icon><Plus /></el-icon> 添加节点
+                            </el-button>
+                        </div>
+                    </template>
+                    <el-empty v-if="nodeList.length === 0" description="暂无节点，请先添加" />
+                    <div class="node-grid" v-else>
+                        <el-card class="node-card" v-for="n in nodeList" :key="n.id" shadow="hover">
+                            <div class="card-header">
+                                <div class="name">
+                                    <el-badge is-dot :type="n.online ? 'success' : 'danger'" />
+                                    {{ n.name || n.id }}
+                                </div>
+                                <el-tag :type="statusType(n)" size="small">{{ statusLabel(n) }}</el-tag>
+                            </div>
+
+                            <!-- 节点信息 -->
+                            <div class="node-info" style="margin-top:8px">
+                                <div v-if="n.remark"><span class="label">备注：</span>{{ n.remark }}</div>
+                                <div v-if="n.account_1688"><span class="label">1688账号：</span>{{ n.account_1688 }}</div>
+                                <div v-if="n.last_heartbeat"><span class="label">最近心跳：</span>{{ formatTime(n.last_heartbeat) }}</div>
+                            </div>
+
+                            <!-- 进度 -->
+                            <div class="progress-section" v-if="n.task_progress && n.task_status === 'filling_cart'">
+                                <div class="progress-label">
+                                    <span>已加购 {{ n.task_progress.items_added || 0 }} 件</span>
+                                    <span>&yen;{{ (n.task_progress.local_amount || 0).toFixed(2) }} / &yen;{{ n.task_progress.target_amount || 0 }}</span>
+                                </div>
+                                <el-progress :percentage="progressPct(n)" :show-text="false" :stroke-width="8" />
+                            </div>
+
+                            <!-- 操作按钮 -->
+                            <div style="margin-top: 12px; display: flex; gap: 6px; flex-wrap: wrap">
+                                <el-button size="small" @click="openConfig(n)">配置</el-button>
+                                <template v-if="!n.online">
+                                    <el-tag type="info" size="small">离线</el-tag>
+                                </template>
+                                <template v-else-if="!n.task_status || ['idle','completed','failed','cancelled'].includes(n.task_status)">
+                                    <el-button type="success" size="small" @click="startTask(n.id)">启动</el-button>
+                                </template>
+                                <template v-else-if="n.task_status === 'awaiting_approval'">
+                                    <el-button type="success" size="small" @click="approveCheckout(n.task_id)">确认结算</el-button>
+                                    <el-button type="danger" size="small" @click="rejectCheckout(n.task_id)">取消结算</el-button>
+                                </template>
+                                <template v-else>
+                                    <el-button type="danger" size="small" @click="stopTask(n.id)">停止</el-button>
+                                </template>
+                                <el-button size="small" :type="showLogs[n.id] ? 'primary' : ''" @click="toggleLog(n.id)" plain>日志</el-button>
+                            </div>
+
+                            <!-- 日志面板 -->
+                            <div class="log-box" v-if="showLogs[n.id]" :ref="el => logRefs[n.id] = el">
+                                <div class="log-line" :class="l.level" v-for="(l, i) in (nodeLogs[n.id] || []).slice(-100)" :key="i">
+                                    {{ l.message }}
+                                </div>
+                            </div>
+                        </el-card>
+                    </div>
+                </el-card>
             </template>
 
             <!-- 节点管理页面 -->
@@ -287,10 +322,36 @@ html, body, #app { height: 100%; margin: 0; }
 </div>
 
 <!-- 添加节点弹窗 -->
-<el-dialog v-model="showAddNode" title="添加节点" width="420px">
-    <el-form label-width="80px">
+<el-dialog v-model="showAddNode" title="添加节点" width="520px">
+    <el-form label-width="100px">
+        <el-divider content-position="left">基本信息</el-divider>
         <el-form-item label="节点名称">
-            <el-input v-model="newNodeName" placeholder="如：服务器A-张三" />
+            <el-input v-model="newNode.name" placeholder="如：服务器A-张三" />
+        </el-form-item>
+        <el-form-item label="备注">
+            <el-input v-model="newNode.remark" placeholder="可选" />
+        </el-form-item>
+        <el-form-item label="1688账号">
+            <el-input v-model="newNode.account_1688" placeholder="绑定的1688账号" />
+        </el-form-item>
+        <el-divider content-position="left">买手信息（用于数据统计）</el-divider>
+        <el-form-item label="买手姓名">
+            <el-input v-model="newNode.buyer_name" placeholder="" />
+        </el-form-item>
+        <el-form-item label="买手号">
+            <el-input v-model="newNode.buyer_id" placeholder="" />
+        </el-form-item>
+        <el-form-item label="卡编号">
+            <el-input v-model="newNode.card_no" placeholder="" />
+        </el-form-item>
+        <el-form-item label="支付宝号码">
+            <el-input v-model="newNode.alipay_account" placeholder="" />
+        </el-form-item>
+        <el-form-item label="买手手机">
+            <el-input v-model="newNode.buyer_phone" placeholder="" />
+        </el-form-item>
+        <el-form-item label="发货地址">
+            <el-input v-model="newNode.ship_address" type="textarea" :rows="2" placeholder="" />
         </el-form-item>
     </el-form>
     <template #footer>
@@ -368,9 +429,23 @@ const app = createApp({
         const showLogs = reactive({});
         const logRefs = reactive({});
 
+        // 今日统计
+        const todayStats = reactive({today_success:0, today_failed:0, today_amount:0});
+        async function loadTodayStats() {
+            try {
+                const res = await fetch('/api/nodes/today-stats');
+                Object.assign(todayStats, await res.json());
+            } catch(e) {}
+        }
+
+        function formatTime(iso) {
+            if (!iso) return '-';
+            try { return new Date(iso).toLocaleString('zh-CN'); } catch(e) { return iso; }
+        }
+
         // 添加节点
         const showAddNode = ref(false);
-        const newNodeName = ref('');
+        const newNode = reactive({name:'', remark:'', account_1688:'', buyer_name:'', buyer_id:'', card_no:'', alipay_account:'', buyer_phone:'', ship_address:''});
         const showNodeResult = ref(false);
         const nodeResultJson = ref('');
 
@@ -460,12 +535,13 @@ const app = createApp({
 
         async function addNode() {
             try {
-                const res = await fetch('/api/nodes/tokens', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({name:newNodeName.value||''})});
+                const res = await fetch('/api/nodes/tokens', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(Object.assign({}, newNode))});
                 const data = await res.json();
                 nodeResultJson.value = JSON.stringify({server_url:'ws://'+location.host+'/ws/agent', node_id:data.node_id, token:data.token}, null, 2);
                 showAddNode.value = false;
                 showNodeResult.value = true;
-                newNodeName.value = '';
+                // 重置表单
+                Object.keys(newNode).forEach(k => newNode[k] = '');
                 loadNodes();
             } catch(e) { ElementPlus.ElMessage.error('创建失败'); }
         }
@@ -603,13 +679,14 @@ const app = createApp({
             if (index === 'data') loadReports();
         }
 
-        onMounted(() => { loadNodes(); connectWS(); });
+        onMounted(() => { loadNodes(); loadTodayStats(); connectWS(); });
 
         return {
             currentPage, pageTitle, nodeList, onlineCount, activeCount,
+            todayStats, formatTime,
             showLogs, nodeLogs, logRefs, toggleLog,
             statusLabel, statusType, progressPct,
-            showAddNode, newNodeName, addNode,
+            showAddNode, newNode, addNode,
             showNodeResult, nodeResultJson, copyNodeResult,
             deleteNode, startTask, stopTask, approveCheckout, rejectCheckout,
             showConfig, configTitle, configForm, imageList,
