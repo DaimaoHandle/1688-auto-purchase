@@ -127,13 +127,28 @@ def _confirm_popup(page):
 def capture_cart_url(page) -> str:
     """
     在 1688 首页（登录后）获取采购车链接的完整 URL。
-    需要在搜图之前调用，此时页面还在首页，采购车按钮可见。
+    先确保在首页并等待页面完全加载，然后多次尝试查找采购车链接。
     返回采购车 URL 字符串，失败返回空字符串。
     """
-    # 点击采购车按钮，捕获新标签页的 URL，然后关闭该标签
-    coord = _find_cart_link(page)
+    # 确保在 1688 首页
+    try:
+        if '1688.com' not in page.url or 'detail' in page.url or 'offer' in page.url:
+            page.goto("https://www.1688.com", wait_until="domcontentloaded")
+            page.wait_for_timeout(3000)
+    except Exception:
+        pass
+
+    # 等待页面完全加载后再找采购车链接（最多等 15 秒，每 2 秒试一次）
+    coord = None
+    for attempt in range(8):
+        coord = _find_cart_link(page)
+        if coord and coord.get('href'):
+            break
+        logger.info(f"首页查找采购车链接...（第{attempt+1}次）")
+        page.wait_for_timeout(2000)
+
     if not coord or not coord.get('href'):
-        logger.warning("首页未找到采购车链接")
+        logger.warning("首页未找到采购车链接（多次尝试后仍未找到）")
         return ""
 
     logger.info(f"获取采购车URL: 点击 \"{coord['txt']}\" href={coord['href']}")
@@ -145,7 +160,6 @@ def capture_cart_url(page) -> str:
         cart_page.wait_for_timeout(2000)
         cart_url = cart_page.url
         logger.info(f"采购车URL已获取: {cart_url}")
-        # 关闭采购车标签，回到首页
         cart_page.close()
         return cart_url
     except Exception as e:
