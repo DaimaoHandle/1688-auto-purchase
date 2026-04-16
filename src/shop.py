@@ -359,32 +359,30 @@ def _send_message_to_service(context, detail_page):
             if not chat_page:
                 return
 
-        # 客服聊天在 iframe 内（可能多层嵌套），遍历所有 frame 查找输入框
+        # 客服聊天在 iframe 内，使用 Playwright frame 对象直接操作（自动处理坐标偏移）
         try:
-            # 策略：找到发送按钮坐标 → 点击其左上方区域激活输入框 → 键盘输入 → 点击发送
             sent = False
             chat_frame = None
+
+            # 等待 iframe 内输入框出现（最多 20 秒）
             for _wait in range(10):
                 frames = chat_page.frames
                 for f in frames:
                     try:
-                        # 在每个 frame 内找发送按钮
-                        btn_info = f.evaluate("""() => {
-                            var all = document.querySelectorAll('button, a, div, span');
+                        # 检查这个 frame 内是否有输入框
+                        has_input = f.evaluate("""() => {
+                            var el = document.querySelector('pre.edit[contenteditable="true"]');
+                            if (el) return true;
+                            var all = document.querySelectorAll('[contenteditable="true"]');
                             for (var i = 0; i < all.length; i++) {
-                                var txt = String(all[i].innerText || '').trim();
-                                if (txt.indexOf('发送') !== -1 && txt.length < 10) {
-                                    var r = all[i].getBoundingClientRect();
-                                    if (r.width > 20 && r.height > 15) {
-                                        return {x: r.x, y: r.y, w: r.width, h: r.height};
-                                    }
-                                }
+                                var r = all[i].getBoundingClientRect();
+                                if (r.width > 50 && r.height > 15) return true;
                             }
-                            return null;
+                            return false;
                         }""")
-                        if btn_info:
+                        if has_input:
                             chat_frame = f
-                            logger.info(f"在 frame {f.url[:50]} 找到发送按钮 ({btn_info['x']:.0f},{btn_info['y']:.0f})")
+                            logger.info(f"找到客服输入框所在 frame: {f.url[:60]}")
                             break
                     except Exception:
                         continue
@@ -392,28 +390,50 @@ def _send_message_to_service(context, detail_page):
                     break
                 chat_page.wait_for_timeout(2000)
 
-            if chat_frame and btn_info:
-                # 点击发送按钮左上方区域（输入框区域）激活输入状态
-                input_x = btn_info['x'] - 100
-                input_y = btn_info['y'] - 30
-                logger.info(f"点击输入框区域 ({input_x:.0f},{input_y:.0f}) 激活输入")
-                chat_page.mouse.click(input_x, input_y)
+            if chat_frame:
+                # 用 Playwright frame.click() 点击输入框（自动处理 iframe 坐标偏移）
+                try:
+                    chat_frame.click('pre.edit[contenteditable="true"]', timeout=3000)
+                except Exception:
+                    try:
+                        chat_frame.click('[contenteditable="true"]', timeout=3000)
+                    except Exception:
+                        logger.warning("点击输入框失败")
+
                 chat_page.wait_for_timeout(500)
 
-                # 键盘输入消息
+                # 用 Playwright keyboard 输入（作用于当前焦点元素）
                 chat_page.keyboard.type("今天能发货吗")
                 chat_page.wait_for_timeout(500)
 
-                # 点击发送按钮
-                send_x = btn_info['x'] + btn_info['w'] / 2
-                send_y = btn_info['y'] + btn_info['h'] / 2
-                chat_page.mouse.click(send_x, send_y)
-                chat_page.wait_for_timeout(1000)
+                # 用 frame.click() 点击发送按钮
+                try:
+                    # 找包含"发送"文字且可见的按钮
+                    send_clicked = chat_frame.evaluate("""() => {
+                        var all = document.querySelectorAll('button, a, div, span');
+                        for (var i = 0; i < all.length; i++) {
+                            var txt = String(all[i].innerText || '').trim();
+                            if (txt.indexOf('发送') !== -1 && txt.length < 10) {
+                                var r = all[i].getBoundingClientRect();
+                                if (r.width > 20 && r.height > 15) {
+                                    all[i].click();
+                                    return true;
+                                }
+                            }
+                        }
+                        return false;
+                    }""")
+                    if not send_clicked:
+                        # 按 Enter 发送
+                        chat_page.keyboard.press("Enter")
+                except Exception:
+                    chat_page.keyboard.press("Enter")
 
+                chat_page.wait_for_timeout(1000)
                 sent = True
                 logger.info("已发送消息: 今天能发货吗")
             else:
-                logger.warning("未找到客服发送按钮")
+                logger.warning("未找到客服输入框")
         except Exception as e:
             logger.warning(f"发送消息失败: {e}")
 
