@@ -258,6 +258,125 @@ def _find_product_link(card):
     return preferred or fallback
 
 
+def _send_message_to_service(context, detail_page):
+    """
+    在商品详情页点击客服按钮，发送消息，然后关闭客服标签页。
+    """
+    logger.info("准备给客服发消息...")
+
+    # 找客服按钮并点击（通常包含"联系客服"、"客服"、"咨询"等文字，或是旺旺图标）
+    try:
+        coord = detail_page.evaluate("""() => {
+            // 找包含客服/咨询/联系文字的可点击元素
+            var keywords = ['联系客服', '客服', '咨询', '在线咨询', '立即咨询'];
+            var all = document.querySelectorAll('a, button, div, span');
+            for (var i = 0; i < all.length; i++) {
+                var el = all[i];
+                var txt = String(el.innerText || el.textContent || '').trim();
+                for (var k = 0; k < keywords.length; k++) {
+                    if (txt.indexOf(keywords[k]) !== -1 && txt.length < 15) {
+                        var r = el.getBoundingClientRect();
+                        if (r.width > 10 && r.height > 10 && r.top > 0 && r.top < window.innerHeight) {
+                            return {x: r.x + r.width / 2, y: r.y + r.height / 2, txt: txt};
+                        }
+                    }
+                }
+            }
+            // 兜底：找 href 含 ww 或 im 的链接（旺旺）
+            var links = document.querySelectorAll('a[href*="ww."], a[href*="/im/"], a[href*="amos"]');
+            for (var j = 0; j < links.length; j++) {
+                var r2 = links[j].getBoundingClientRect();
+                if (r2.width > 5 && r2.height > 5) {
+                    return {x: r2.x + r2.width / 2, y: r2.y + r2.height / 2, txt: '旺旺'};
+                }
+            }
+            return null;
+        }""")
+
+        if not coord:
+            logger.warning("未找到客服按钮，跳过发消息")
+            return
+
+        logger.info(f"点击客服按钮: \"{coord['txt']}\" ({coord['x']:.0f},{coord['y']:.0f})")
+
+        # 点击客服按钮，可能打开新标签页
+        chat_page = None
+        try:
+            with context.expect_page(timeout=8000) as chat_page_info:
+                detail_page.mouse.click(coord['x'], coord['y'])
+            chat_page = chat_page_info.value
+            chat_page.wait_for_load_state("domcontentloaded")
+            chat_page.wait_for_timeout(3000)
+            logger.info(f"客服页面已打开: {chat_page.url}")
+        except Exception:
+            # 没有新标签，可能是弹窗或当前页内嵌
+            logger.warning("客服未在新标签打开，跳过发消息")
+            return
+
+        # 在客服页面找到输入框并发送消息
+        try:
+            sent = chat_page.evaluate("""() => {
+                // 找输入框（textarea 或 contenteditable 的 div）
+                var inputs = document.querySelectorAll('textarea, [contenteditable="true"], input[type="text"]');
+                for (var i = 0; i < inputs.length; i++) {
+                    var el = inputs[i];
+                    var r = el.getBoundingClientRect();
+                    if (r.width > 100 && r.height > 20) {
+                        // 聚焦并输入
+                        el.focus();
+                        if (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT') {
+                            el.value = '今天能发货吗';
+                            el.dispatchEvent(new Event('input', {bubbles: true}));
+                        } else {
+                            el.innerText = '今天能发货吗';
+                            el.dispatchEvent(new Event('input', {bubbles: true}));
+                        }
+                        return {found: true, tag: el.tagName};
+                    }
+                }
+                return {found: false};
+            }""")
+
+            if sent and sent.get('found'):
+                chat_page.wait_for_timeout(500)
+                # 找发送按钮并点击
+                send_result = chat_page.evaluate("""() => {
+                    var btns = document.querySelectorAll('button, a, div, span');
+                    for (var i = 0; i < btns.length; i++) {
+                        var txt = String(btns[i].innerText || '').trim();
+                        if (txt === '发送' || txt === 'Send') {
+                            var r = btns[i].getBoundingClientRect();
+                            if (r.width > 10 && r.height > 10) {
+                                btns[i].click();
+                                return true;
+                            }
+                        }
+                    }
+                    return false;
+                }""")
+
+                if not send_result:
+                    # 尝试按 Enter 发送
+                    chat_page.keyboard.press("Enter")
+
+                chat_page.wait_for_timeout(1000)
+                logger.info("已发送消息: 今天能发货吗")
+            else:
+                logger.warning("未找到客服输入框")
+        except Exception as e:
+            logger.warning(f"发送消息失败: {e}")
+
+        # 关闭客服标签页
+        try:
+            chat_page.close()
+            logger.info("客服标签页已关闭")
+        except Exception:
+            pass
+
+    except Exception as e:
+        logger.warning(f"客服消息流程异常: {e}")
+
+
 def find_shop_and_enter(context, result_page, shop_name: str):
     """
     在搜索结果中找到目标店铺商品，进入详情页，再进入全店商品列表
@@ -298,6 +417,9 @@ def find_shop_and_enter(context, result_page, shop_name: str):
     detail_page.wait_for_load_state("domcontentloaded")
     detail_page.wait_for_timeout(3000)
     logger.info(f"商品详情页: {detail_page.url}")
+
+    # 给客服发消息
+    _send_message_to_service(context, detail_page)
 
     # 在详情页找到进入全店的链接
     logger.info("在详情页查找进入全店链接...")
