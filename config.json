@@ -21,6 +21,10 @@
     "element_wait": 10000,
     "login_wait": 120000
   },
+  "retry": {
+    "max_retries": 3,
+    "circuit_breaker_threshold": 5
+  },
   "logging": {
     "level": "INFO",
     "file": "logs/app.log"

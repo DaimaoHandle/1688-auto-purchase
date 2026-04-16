@@ -1,6 +1,8 @@
 import logging
 from src.utils import parse_price, save_screenshot, random_delay
 from src.shop import get_shop_items, go_to_next_page
+from src.selector_health import try_selectors, get_tracker
+from src.retry import CircuitBreaker, is_page_alive, check_for_verification, wait_for_verification_clear, try_refresh_page
 
 logger = logging.getLogger("1688-auto")
 
@@ -76,15 +78,14 @@ SKIP_KEYWORDS = ["询价", "联系客服", "已下架", "无货", "暂无报价"
 
 
 def _get_item_price(item_el) -> float:
-    for sel in ITEM_PRICE_SELECTORS:
+    el = try_selectors(item_el, ITEM_PRICE_SELECTORS, "商品列表价格")
+    if el:
         try:
-            el = item_el.query_selector(sel)
-            if el:
-                price = parse_price(el.inner_text().strip())
-                if price > 0:
-                    return price
+            price = parse_price(el.inner_text().strip())
+            if price > 0:
+                return price
         except Exception:
-            continue
+            pass
     return 0.0
 
 
@@ -100,28 +101,26 @@ def _should_skip_item(item_el) -> bool:
 
 
 def _close_popup(page):
-    for sel in POPUP_CLOSE_SELECTORS:
+    el = try_selectors(page, POPUP_CLOSE_SELECTORS, "弹窗关闭按钮", check_visible=True)
+    if el:
         try:
-            el = page.query_selector(sel)
-            if el and el.is_visible():
-                el.click()
-                page.wait_for_timeout(500)
-                return True
+            el.click()
+            page.wait_for_timeout(500)
+            return True
         except Exception:
-            continue
+            pass
     return False
 
 
 def _confirm_popup(page):
-    for sel in POPUP_CONFIRM_SELECTORS:
+    el = try_selectors(page, POPUP_CONFIRM_SELECTORS, "弹窗确认按钮", check_visible=True)
+    if el:
         try:
-            el = page.query_selector(sel)
-            if el and el.is_visible():
-                el.click()
-                page.wait_for_timeout(500)
-                return True
+            el.click()
+            page.wait_for_timeout(500)
+            return True
         except Exception:
-            continue
+            pass
     return False
 
 
@@ -729,7 +728,19 @@ def run_cart_filling(context, shop_page, cart_config: dict):
     last_verified_amount = 0.0  # 上次校准时的金额
     page_num = 1
 
+    breaker = CircuitBreaker(threshold=5)
+
     while added_count < max_items:
+        # 检查熔断器
+        if breaker.should_abort():
+            logger.error(f"[熔断] 连续失败 {breaker.consecutive_failures} 次，中止加购")
+            break
+
+        # 熔断级别 1：刷新页面
+        if breaker.level >= 1 and breaker.consecutive_failures % 5 == 0:
+            logger.warning(f"[自愈] 连续失败 {breaker.consecutive_failures} 次，刷新店铺页面...")
+            try_refresh_page(shop_page)
+
         items, item_sel = get_shop_items(shop_page)
         if not items:
             logger.warning(f"第{page_num}页未找到商品，停止")
@@ -741,6 +752,9 @@ def run_cart_filling(context, shop_page, cart_config: dict):
             if added_count >= max_items:
                 logger.info(f"已达最大商品数 {max_items}，停止")
                 return added_count
+
+            if breaker.should_abort():
+                break
 
             if _should_skip_item(item_el):
                 logger.debug("跳过无货/询价商品")
@@ -757,13 +771,22 @@ def run_cart_filling(context, shop_page, cart_config: dict):
                     logger.info(f"加入此商品(预估¥{est_price:.2f})后将超目标，跳过")
                     continue
 
+            # 检测验证码
+            if check_for_verification(shop_page):
+                wait_for_verification_clear(shop_page)
+
             # 加入采购车（返回实际价格）
             item_price = add_item_to_cart(context, item_el, shop_page=shop_page)
             if item_price > 0:
                 added_count += 1
                 local_amount += item_price
+                breaker.record_success()
                 logger.info(f"[{added_count}] 已加入采购车 | 商品价格: ¥{item_price:.2f} | 本地累计: ¥{local_amount:.2f} / ¥{target}")
                 print(f"  已加入 {added_count} 件 | 商品价格: ¥{item_price:.2f} | 累计: ¥{local_amount:.2f} / 目标: ¥{target}")
+            else:
+                breaker.record_failure()
+                if breaker.level >= 1:
+                    logger.warning(f"[熔断] 加购失败，连续失败 {breaker.consecutive_failures} 次（级别{breaker.level}）")
 
             # 定期校准：新标签页打开采购车读取实际金额，不影响当前店铺页
             if local_amount - last_verified_amount >= verify_interval:

@@ -16,7 +16,12 @@ def save_report(config: dict, added_count: int, order_count: int, errors: list =
     """保存运行报告到 reports/ 目录。"""
     os.makedirs(_REPORT_DIR, exist_ok=True)
 
+    from src.selector_health import get_tracker
+
     now = datetime.now()
+    tracker = get_tracker()
+    broken_selectors = tracker.get_broken_groups()
+
     report = {
         "time": now.strftime("%Y-%m-%d %H:%M:%S"),
         "shop": config.get("search", {}).get("target_shop_name", ""),
@@ -25,6 +30,7 @@ def save_report(config: dict, added_count: int, order_count: int, errors: list =
         "items_added": added_count,
         "orders_created": order_count,
         "errors": errors or [],
+        "broken_selectors": broken_selectors,
     }
 
     filename = now.strftime("report_%Y%m%d_%H%M%S.json")

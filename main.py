@@ -11,6 +11,7 @@ from src.search import image_search
 from src.shop import find_shop_and_enter
 from src.cart import run_cart_filling, run_cart_checkout, capture_cart_url, set_cart_url
 from src.report import save_report
+from src.selector_health import get_tracker
 
 
 def main():
@@ -97,6 +98,15 @@ def main():
         # 生成运行报告
         try:
             save_report(config, added, orders, errors)
+        except Exception:
+            pass
+
+        # 生成选择器健康报告
+        try:
+            tracker = get_tracker()
+            broken = tracker.get_broken_groups()
+            if broken or tracker.get_summary():
+                tracker.save_report()
         except Exception:
             pass
 

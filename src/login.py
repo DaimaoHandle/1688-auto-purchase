@@ -1,6 +1,7 @@
 import logging
 import time
 from src.utils import save_screenshot
+from src.selector_health import try_selectors
 
 logger = logging.getLogger("1688-auto")
 
@@ -42,13 +43,9 @@ def is_verification_page(page) -> bool:
         for kw in _VERIFY_URL_KEYWORDS:
             if kw in url:
                 return True
-        for sel in _VERIFY_SELECTORS:
-            try:
-                el = page.query_selector(sel)
-                if el and el.is_visible():
-                    return True
-            except Exception:
-                continue
+        el = try_selectors(page, _VERIFY_SELECTORS, "验证码检测", check_visible=True)
+        if el:
+            return True
     except Exception:
         pass
     return False
@@ -139,24 +136,14 @@ def _check_not_on_login_page(page) -> bool:
 
 def is_logged_in(page) -> bool:
     # 1. 未登录元素存在 → 明确未登录
-    for selector in NOT_LOGGED_IN_SELECTORS:
-        try:
-            el = page.query_selector(selector)
-            if el and el.is_visible():
-                logger.debug(f"检测到未登录标志: {selector}")
-                return False
-        except Exception:
-            continue
+    el = try_selectors(page, NOT_LOGGED_IN_SELECTORS, "未登录标志", check_visible=True)
+    if el:
+        return False
 
     # 2. 登录成功元素存在 → 已登录
-    for selector in LOGIN_PRESENT_SELECTORS:
-        try:
-            el = page.query_selector(selector)
-            if el and el.is_visible():
-                logger.debug(f"登录检测命中选择器: {selector}")
-                return True
-        except Exception:
-            continue
+    el = try_selectors(page, LOGIN_PRESENT_SELECTORS, "已登录标志", check_visible=True)
+    if el:
+        return True
 
     # 3. cookie 判断
     if _check_login_cookie(page):

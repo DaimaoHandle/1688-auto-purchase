@@ -1,6 +1,7 @@
 import logging
 import re
 from src.utils import save_screenshot, random_delay
+from src.selector_health import try_selectors
 
 logger = logging.getLogger("1688-auto")
 
@@ -390,20 +391,18 @@ def _enter_shop_from_detail(context, detail_page):
 
     # 兜底：原有选择器列表
     if not shop_page:
-        for sel in ENTER_SHOP_SELECTORS:
+        el = try_selectors(detail_page, ENTER_SHOP_SELECTORS, "进入店铺链接", check_visible=True)
+        if el:
             try:
-                el = detail_page.query_selector(sel)
-                if el and el.is_visible():
-                    logger.info(f"找到进店链接: {sel}")
-                    with context.expect_page() as shop_page_info:
-                        el.click()
-                    shop_page = shop_page_info.value
-                    shop_page.wait_for_load_state("domcontentloaded")
-                    shop_page.wait_for_timeout(3000)
-                    logger.info(f"全店商品页（原始URL）: {shop_page.url}")
-                    break
+                logger.info("找到进店链接（兜底选择器）")
+                with context.expect_page() as shop_page_info:
+                    el.click()
+                shop_page = shop_page_info.value
+                shop_page.wait_for_load_state("domcontentloaded")
+                shop_page.wait_for_timeout(3000)
+                logger.info(f"全店商品页（原始URL）: {shop_page.url}")
             except Exception:
-                continue
+                pass
 
     if not shop_page:
         save_screenshot(detail_page, "enter_shop_failed")
