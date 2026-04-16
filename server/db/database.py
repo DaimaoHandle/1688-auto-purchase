@@ -43,11 +43,15 @@ CREATE TABLE IF NOT EXISTS tasks (
 
 CREATE TABLE IF NOT EXISTS reports (
     id              TEXT PRIMARY KEY,
-    task_id         TEXT NOT NULL REFERENCES tasks(id),
-    node_id         TEXT NOT NULL REFERENCES nodes(id),
+    task_id         TEXT NOT NULL,
+    node_id         TEXT NOT NULL,
+    shop_name       TEXT NOT NULL DEFAULT '',
+    operator        TEXT NOT NULL DEFAULT '',
+    buyer_info      TEXT NOT NULL DEFAULT '',
     items_added     INTEGER NOT NULL DEFAULT 0,
     orders_created  INTEGER NOT NULL DEFAULT 0,
-    total_amount    REAL NOT NULL DEFAULT 0.0,
+    actual_amount   REAL NOT NULL DEFAULT 0.0,
+    target_amount   REAL NOT NULL DEFAULT 0.0,
     errors_json     TEXT DEFAULT '[]',
     report_json     TEXT,
     created_at      TEXT NOT NULL DEFAULT (datetime('now'))

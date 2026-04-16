@@ -195,6 +195,12 @@ html, body, #app { height: 100%; margin: 0; }
                             <div style="font-size:13px;color:#999;margin-top:4px">总生成订单</div>
                         </div>
                     </el-card>
+                    <el-card style="flex:1" shadow="hover">
+                        <div style="text-align:center">
+                            <div style="font-size:28px;font-weight:700;color:#f56c6c">&yen;{{ (reportSummary.total_amount || 0).toFixed(2) }}</div>
+                            <div style="font-size:13px;color:#999;margin-top:4px">总采购金额</div>
+                        </div>
+                    </el-card>
                 </div>
 
                 <!-- 按节点统计 -->
@@ -202,9 +208,12 @@ html, body, #app { height: 100%; margin: 0; }
                     <template #header><span style="font-size:14px;font-weight:600">节点统计</span></template>
                     <el-table :data="reportSummary.by_node" size="small">
                         <el-table-column prop="node_name" label="节点" />
-                        <el-table-column prop="tasks" label="任务数" width="100" />
-                        <el-table-column prop="items" label="加购商品" width="100" />
-                        <el-table-column prop="orders" label="生成订单" width="100" />
+                        <el-table-column prop="tasks" label="任务数" width="80" />
+                        <el-table-column prop="items" label="加购商品" width="90" />
+                        <el-table-column prop="orders" label="订单数" width="80" />
+                        <el-table-column label="采购金额" width="120" align="right">
+                            <template #default="{row}"><span>&yen;{{ (row.amount || 0).toFixed(2) }}</span></template>
+                        </el-table-column>
                     </el-table>
                 </el-card>
 
@@ -212,30 +221,48 @@ html, body, #app { height: 100%; margin: 0; }
                 <el-card shadow="never">
                     <template #header>
                         <div style="display:flex;justify-content:space-between;align-items:center">
-                            <span style="font-size:14px;font-weight:600">任务记录</span>
-                            <el-select v-model="reportFilter" placeholder="全部节点" clearable size="small" style="width:180px" @change="loadReports">
-                                <el-option v-for="n in nodeList" :key="n.id" :label="n.name || n.id" :value="n.id" />
-                            </el-select>
+                            <span style="font-size:14px;font-weight:600">采购记录</span>
+                            <div style="display:flex;gap:8px;align-items:center">
+                                <el-select v-model="reportFilter" placeholder="全部节点" clearable size="small" style="width:180px" @change="loadReports">
+                                    <el-option v-for="n in nodeList" :key="n.id" :label="n.name || n.id" :value="n.id" />
+                                </el-select>
+                                <el-button size="small" type="success" @click="exportReports">
+                                    <el-icon><Download /></el-icon> 导出
+                                </el-button>
+                            </div>
                         </div>
                     </template>
-                    <el-table :data="reportList" size="small" v-loading="reportLoading">
-                        <el-table-column prop="created_at" label="时间" width="170" />
-                        <el-table-column prop="node_name" label="节点" width="160" />
-                        <el-table-column prop="items_added" label="加购" width="80" />
-                        <el-table-column prop="orders_created" label="订单" width="80" />
-                        <el-table-column label="异常" width="80">
+                    <el-table :data="reportList" size="small" v-loading="reportLoading" border stripe>
+                        <el-table-column prop="created_at" label="采购日期" width="170" />
+                        <el-table-column prop="shop_name" label="店铺" min-width="160">
+                            <template #default="{row}">{{ row.shop_name || '-' }}</template>
+                        </el-table-column>
+                        <el-table-column prop="operator" label="操作人" width="100">
+                            <template #default="{row}">{{ row.operator || '-' }}</template>
+                        </el-table-column>
+                        <el-table-column prop="buyer_info" label="买手信息" width="160">
+                            <template #default="{row}">{{ row.buyer_info || '-' }}</template>
+                        </el-table-column>
+                        <el-table-column prop="orders_created" label="订单笔数" width="90" align="center" />
+                        <el-table-column label="采购金额" width="100" align="right">
                             <template #default="{row}">
-                                <el-tag v-if="row.errors && row.errors.length" type="danger" size="small">{{ row.errors.length }}</el-tag>
-                                <span v-else style="color:#999">-</span>
+                                <span style="color:#e6a23c;font-weight:600">{{ row.actual_amount ? '\u00a5' + row.actual_amount.toFixed(2) : '-' }}</span>
                             </template>
                         </el-table-column>
-                        <el-table-column prop="task_id" label="任务ID" width="100">
+                        <el-table-column label="计划金额" width="100" align="right">
                             <template #default="{row}">
-                                <span style="font-size:11px;color:#999">{{ row.task_id }}</span>
+                                <span>\u00a5{{ (row.target_amount || 0).toFixed(2) }}</span>
+                            </template>
+                        </el-table-column>
+                        <el-table-column prop="items_added" label="加购数" width="70" align="center" />
+                        <el-table-column label="状态" width="70" align="center">
+                            <template #default="{row}">
+                                <el-tag v-if="row.errors && row.errors.length" type="danger" size="small">异常</el-tag>
+                                <el-tag v-else type="success" size="small">正常</el-tag>
                             </template>
                         </el-table-column>
                     </el-table>
-                    <el-empty v-if="!reportLoading && reportList.length === 0" description="暂无记录" />
+                    <el-empty v-if="!reportLoading && reportList.length === 0" description="暂无采购记录" />
                 </el-card>
             </template>
 
@@ -521,6 +548,11 @@ const app = createApp({
         const reportFilter = ref('');
         const reportLoading = ref(false);
 
+        function exportReports() {
+            const params = reportFilter.value ? '?node_id=' + reportFilter.value : '';
+            window.open('/api/reports/export' + params, '_blank');
+        }
+
         async function loadReports() {
             reportLoading.value = true;
             try {
@@ -564,7 +596,7 @@ const app = createApp({
             deleteNode, startTask, stopTask, approveCheckout, rejectCheckout,
             showConfig, configTitle, configForm, imageList,
             openConfig, saveConfig, onFileChange, onDrop, onSelectExisting,
-            reportSummary, reportList, reportFilter, reportLoading, loadReports,
+            reportSummary, reportList, reportFilter, reportLoading, loadReports, exportReports,
             onMenuSelect,
         };
     }

@@ -122,13 +122,22 @@ async def agent_ws_endpoint(websocket: WebSocket):
                     import uuid, json
                     report_id = str(uuid.uuid4())[:8]
                     task_id = payload.get("task_id", "")
+                    # 获取节点名称作为买手信息
+                    node_state = node_manager.get(node_id)
+                    buyer_info = node_state.name if node_state else node_id
                     db = await get_db()
                     await db.execute(
-                        """INSERT INTO reports (id, task_id, node_id, items_added, orders_created, errors_json, report_json)
-                           VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                        """INSERT INTO reports (id, task_id, node_id, shop_name, operator, buyer_info,
+                           items_added, orders_created, actual_amount, target_amount, errors_json, report_json)
+                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                         (report_id, task_id, node_id,
+                         payload.get("shop_name", ""),
+                         "",  # operator: 后续加账号机制后填充
+                         buyer_info,
                          payload.get("items_added", 0),
                          payload.get("orders_created", 0),
+                         0.0,  # actual_amount: 后续从结算结果获取
+                         payload.get("target_amount", 0),
                          json.dumps(payload.get("errors", []), ensure_ascii=False),
                          json.dumps(payload, ensure_ascii=False))
                     )

@@ -256,6 +256,8 @@ class PurchaseWorker:
             # 发送最终报告
             self._send(make_message(MSG_TASK_REPORT, {
                 "task_id": task_id,
+                "shop_name": config.get("search", {}).get("target_shop_name", ""),
+                "target_amount": config.get("cart", {}).get("target_amount", 0),
                 "items_added": added,
                 "orders_created": orders,
                 "errors": errors,
