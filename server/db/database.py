@@ -116,12 +116,38 @@ async def get_db() -> aiosqlite.Connection:
     return db
 
 
+async def _migrate(db):
+    """增量迁移：给已有表补充缺失的字段，避免删库重建。"""
+    migrations = [
+        # (表名, 字段名, 字段定义)
+        ("nodes", "remark", "TEXT NOT NULL DEFAULT ''"),
+        ("nodes", "account_1688", "TEXT NOT NULL DEFAULT ''"),
+        ("nodes", "buyer_name", "TEXT NOT NULL DEFAULT ''"),
+        ("nodes", "buyer_id", "TEXT NOT NULL DEFAULT ''"),
+        ("nodes", "card_no", "TEXT NOT NULL DEFAULT ''"),
+        ("nodes", "alipay_account", "TEXT NOT NULL DEFAULT ''"),
+        ("nodes", "buyer_phone", "TEXT NOT NULL DEFAULT ''"),
+        ("nodes", "ship_address", "TEXT NOT NULL DEFAULT ''"),
+        ("reports", "shop_name", "TEXT NOT NULL DEFAULT ''"),
+        ("reports", "operator", "TEXT NOT NULL DEFAULT ''"),
+        ("reports", "buyer_info", "TEXT NOT NULL DEFAULT ''"),
+        ("reports", "actual_amount", "REAL NOT NULL DEFAULT 0.0"),
+        ("reports", "target_amount", "REAL NOT NULL DEFAULT 0.0"),
+    ]
+    for table, column, definition in migrations:
+        try:
+            await db.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+        except Exception:
+            pass  # 字段已存在，忽略
+
+
 async def init_db():
-    """初始化数据库表结构，创建默认管理员。"""
+    """初始化数据库表结构，执行增量迁移，创建默认管理员。"""
     import hashlib, uuid
     db = await get_db()
     try:
         await db.executescript(_SCHEMA)
+        await _migrate(db)
         # 创建默认管理员（如果不存在）
         cursor = await db.execute("SELECT id FROM users WHERE phone = 'admin'")
         if not await cursor.fetchone():
