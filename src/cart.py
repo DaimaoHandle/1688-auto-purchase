@@ -1,7 +1,7 @@
 import logging
 from src.utils import parse_price, save_screenshot, random_delay
 from src.shop import get_shop_items, go_to_next_page, enter_new_product_zone, select_today_new_products, get_new_product_items, click_sort_by_sales
-from src.purchase_history import is_purchased, mark_batch_purchased, extract_offer_id, get_purchased_count
+from src.purchase_history import check_purchased_batch, mark_batch_purchased, extract_offer_id, extract_offer_id_from_href, get_purchased_count
 
 # 当前任务中已加购的 offer_ids（提交订单后标记为已采购）
 _pending_offer_ids = []
@@ -673,11 +673,8 @@ def add_item_to_cart(context, item_el, shop_page=None, shop_name: str = "") -> f
             logger.warning(f"详情页标题异常，跳过: {title}")
             return 0.0
 
-        # 采购去重：检查此商品是否已采购过
+        # 提取 offerId（用于结算后标记已采购）
         offer_id = extract_offer_id(detail_page.url)
-        if offer_id and shop_name and is_purchased(shop_name, offer_id):
-            logger.info(f"商品 {offer_id} 已采购过，跳过")
-            return 0.0
 
         # 若有规格选项先选规格
         _select_first_sku(detail_page)
@@ -770,6 +767,51 @@ def _fill_cart_from_current_page(context, shop_page, cart_config, added_count, l
             break
 
         logger.info(f"{prefix}第{page_num}页共 {len(items)} 个商品")
+
+        # 采购去重：从商品卡片链接中提取 offerId，批量查询已采购记录
+        if shop_name:
+            try:
+                offer_id_map = shop_page.evaluate("""() => {
+                    var result = {};
+                    var imgs = document.querySelectorAll('img');
+                    for (var i = 0; i < imgs.length; i++) {
+                        var img = imgs[i];
+                        var src = img.getAttribute('src') || '';
+                        if (!src || src.indexOf('data:') === 0) continue;
+                        var r = img.getBoundingClientRect();
+                        if (r.width < 100 || r.height < 100 || r.width > 500) continue;
+                        // 从 img 往上找 <a href="...offer/xxx..."> 链接
+                        var node = img;
+                        for (var j = 0; j < 6; j++) {
+                            node = node.parentElement;
+                            if (!node) break;
+                            if (node.tagName === 'A') {
+                                var href = node.getAttribute('href') || '';
+                                var m = href.match(/\\/offer\\/(\\d+)/);
+                                if (m) { result[src] = m[1]; break; }
+                            }
+                            var a = node.querySelector('a[href*="/offer/"]');
+                            if (a) {
+                                var href2 = a.getAttribute('href') || '';
+                                var m2 = href2.match(/\\/offer\\/(\\d+)/);
+                                if (m2) { result[src] = m2[1]; break; }
+                            }
+                        }
+                    }
+                    return result;
+                }""")
+                all_offer_ids = list(set(offer_id_map.values()))
+                if all_offer_ids:
+                    purchased_ids = check_purchased_batch(shop_name, all_offer_ids)
+                    if purchased_ids:
+                        # 过滤掉已采购的商品
+                        before_count = len(items)
+                        items = [el for el in items if offer_id_map.get(el.get_attribute("src") if hasattr(el, 'get_attribute') else "", "") not in purchased_ids]
+                        skipped = before_count - len(items)
+                        if skipped > 0:
+                            logger.info(f"{prefix}去重过滤: 跳过 {skipped} 个已采购商品")
+            except Exception as e:
+                logger.debug(f"去重过滤异常: {e}")
 
         # 优先采购无销量商品：一次性扫描页面，获取有销量的商品图片src集合
         try:
@@ -1673,7 +1715,7 @@ def run_cart_checkout(context, order_limit: float = 500.0, shipping_reserve: flo
         except Exception:
             pass
 
-    # 结算完成，将已加购的商品标记为已采购
+    # 结算完成，将已加购的商品标记为已采购（通过管理端 API 共享给所有采购端）
     if order_count > 0 and _pending_offer_ids and shop_name:
         mark_batch_purchased(shop_name, list(_pending_offer_ids))
     _pending_offer_ids.clear()

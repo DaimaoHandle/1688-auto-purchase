@@ -129,6 +129,18 @@ class PurchaseWorker:
         try:
             self._send_status(STATUS_STARTING, "正在启动浏览器...")
 
+            # 设置采购历史 API 地址（从 agent_config 的 server_url 推导）
+            try:
+                from src.purchase_history import set_server_url
+                agent_cfg_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "agent_config.json")
+                if os.path.isfile(agent_cfg_path):
+                    import json as _json2
+                    with open(agent_cfg_path, "r") as _f2:
+                        _acfg = _json2.load(_f2)
+                    set_server_url(_acfg.get("server_url", ""))
+            except Exception:
+                pass
+
             # 如果下发的 config 为空，用本地 config.json 兜底
             if not config or not config.get("search"):
                 local_config_path = os.path.join(

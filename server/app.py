@@ -18,6 +18,7 @@ from server.api.reports import router as reports_router
 from server.api.auth import router as auth_router, get_current_user
 from server.api.users import router as users_router
 from server.api.audit import router as audit_router
+from server.api.purchased import router as purchased_router
 from server.services.node_manager import node_manager
 from shared.protocol import parse_message, make_message, MSG_STATUS_UPDATE
 
@@ -47,8 +48,10 @@ def create_app() -> FastAPI:
             return await call_next(request)
         if path == "/api/auth/login":
             return await call_next(request)
-        # Agent 图片下载放行（通过 URL 中的 image ID）
+        # Agent 图片下载和采购历史查询放行
         if path.startswith("/api/images/") and request.method == "GET":
+            return await call_next(request)
+        if path.startswith("/api/purchased/"):
             return await call_next(request)
 
         # 检查登录
@@ -67,6 +70,7 @@ def create_app() -> FastAPI:
     app.include_router(images_router)
     app.include_router(reports_router)
     app.include_router(audit_router)
+    app.include_router(purchased_router)
 
     # Agent WebSocket 端点
     @app.websocket("/ws/agent")

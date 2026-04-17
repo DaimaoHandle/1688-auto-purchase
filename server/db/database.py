@@ -77,6 +77,15 @@ CREATE TABLE IF NOT EXISTS users (
     updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS purchased_items (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    shop_name   TEXT NOT NULL,
+    offer_id    TEXT NOT NULL,
+    node_id     TEXT NOT NULL DEFAULT '',
+    created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(shop_name, offer_id)
+);
+
 CREATE TABLE IF NOT EXISTS audit_logs (
     id          TEXT PRIMARY KEY,
     user_id     TEXT NOT NULL DEFAULT '',
