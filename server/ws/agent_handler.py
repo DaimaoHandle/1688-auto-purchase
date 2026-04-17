@@ -117,6 +117,20 @@ async def agent_ws_endpoint(websocket: WebSocket):
             elif msg_type == MSG_LOG_ENTRY:
                 payload["node_id"] = node_id
                 await node_manager.broadcast_to_dashboards(make_message(MSG_LOG_ENTRY, payload))
+                # 存储到数据库
+                try:
+                    db = await get_db()
+                    await db.execute(
+                        "INSERT INTO task_logs (task_id, node_id, level, event_type, phase, message, timestamp) VALUES (?,?,?,?,?,?,?)",
+                        (payload.get("task_id", ""), node_id,
+                         payload.get("level", "INFO"), payload.get("event_type", "runtime"),
+                         payload.get("phase", ""), payload.get("message", ""),
+                         payload.get("timestamp", ""))
+                    )
+                    await db.commit()
+                    await db.close()
+                except Exception:
+                    pass
 
             elif msg_type == MSG_TASK_REPORT:
                 payload["node_id"] = node_id

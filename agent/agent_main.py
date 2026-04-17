@@ -62,7 +62,7 @@ async def main():
     worker = PurchaseWorker(client.outgoing, loop)
 
     # 安装日志拦截器：捕获 1688-auto logger 的输出转发到 WS
-    log_handler = WSLogHandler(client.outgoing, task_id_getter=lambda: worker.task_id)
+    log_handler = WSLogHandler(client.outgoing, task_id_getter=lambda: worker.task_id, state_getter=lambda: worker.state)
     log_handler.set_loop(loop)
     log_handler.setFormatter(logging.Formatter("%(message)s"))
     purchase_logger = logging.getLogger("1688-auto")

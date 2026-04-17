@@ -101,6 +101,8 @@ CREATE TABLE IF NOT EXISTS task_logs (
     task_id     TEXT NOT NULL,
     node_id     TEXT NOT NULL,
     level       TEXT NOT NULL DEFAULT 'INFO',
+    event_type  TEXT NOT NULL DEFAULT 'runtime',
+    phase       TEXT NOT NULL DEFAULT '',
     message     TEXT NOT NULL,
     timestamp   TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -133,6 +135,8 @@ async def _migrate(db):
         ("reports", "buyer_info", "TEXT NOT NULL DEFAULT ''"),
         ("reports", "actual_amount", "REAL NOT NULL DEFAULT 0.0"),
         ("reports", "target_amount", "REAL NOT NULL DEFAULT 0.0"),
+        ("task_logs", "event_type", "TEXT NOT NULL DEFAULT 'runtime'"),
+        ("task_logs", "phase", "TEXT NOT NULL DEFAULT ''"),
     ]
     for table, column, definition in migrations:
         try:

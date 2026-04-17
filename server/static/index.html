@@ -213,47 +213,73 @@ html, body, #app { height: 100%; margin: 0; }
                 </div>
             </template>
 
-            <!-- 节点管理页面 -->
+            <!-- 节点管理页面（上下分区：节点卡片 + 日志面板） -->
             <template v-if="currentPage === 'nodes'">
-                <div style="margin-bottom:16px;text-align:right">
+                <!-- 上半区：节点卡片 -->
+                <div style="margin-bottom:12px;display:flex;justify-content:space-between;align-items:center">
+                    <span style="font-size:14px;font-weight:600">节点列表</span>
                     <el-button type="primary" size="small" @click="showAddNode = true">添加节点</el-button>
                 </div>
-                <div v-if="nodeList.length === 0" style="text-align:center;padding:60px;color:#999">暂无节点</div>
-                <div v-if="nodeList.length > 0" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(400px,1fr));gap:16px">
-                    <div v-for="n in nodeList" :key="n.id" style="background:#fff;border-radius:10px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1)">
-                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
-                            <div style="font-size:16px;font-weight:600;display:flex;align-items:center;gap:8px">
-                                <span :style="{width:'8px',height:'8px',borderRadius:'50%',background:n.online?'#67c23a':'#f56c6c',display:'inline-block'}"></span>
+                <div v-if="nodeList.length === 0" style="text-align:center;padding:40px;color:#999">暂无节点</div>
+                <div v-if="nodeList.length > 0" style="display:flex;gap:12px;overflow-x:auto;padding-bottom:8px">
+                    <div v-for="n in nodeList" :key="n.id"
+                         :style="{minWidth:'280px',background:selectedLogNode===n.id?'#ecf5ff':'#fff',border:selectedLogNode===n.id?'2px solid #409eff':'2px solid transparent',borderRadius:'10px',padding:'14px',boxShadow:'0 1px 3px rgba(0,0,0,0.08)',cursor:'pointer',transition:'all 0.2s'}"
+                         @click="selectLogNode(n.id)">
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+                            <div style="font-size:14px;font-weight:600;display:flex;align-items:center;gap:6px">
+                                <span :style="{width:'7px',height:'7px',borderRadius:'50%',background:n.online?'#67c23a':'#f56c6c',display:'inline-block'}"></span>
                                 {{ n.name || n.id }}
                             </div>
-                            <el-tag :type="n.online ? 'success' : 'info'" size="small" effect="dark">{{ n.online ? '在线' : '离线' }}</el-tag>
+                            <el-tag :type="n.online?'success':'info'" size="small">{{ n.online?'在线':'离线' }}</el-tag>
                         </div>
-                        <div style="font-size:13px;color:#606266;line-height:2.2;background:#fafafa;border-radius:6px;padding:10px 14px">
-                            <div v-if="n.remark"><span style="color:#909399;min-width:80px;display:inline-block">备注</span>{{ n.remark }}</div>
-                            <div><span style="color:#909399;min-width:80px;display:inline-block">服务器IP</span>{{ n.remote_ip || '-' }}</div>
-                            <div><span style="color:#909399;min-width:80px;display:inline-block">节点状态</span>{{ n.online ? '已连接' : '未连接' }}</div>
-                            <div><span style="color:#909399;min-width:80px;display:inline-block">任务状态</span>{{ n.task_status ? statusLabel(n) : '空闲' }}</div>
+                        <div style="font-size:12px;color:#909399;margin-bottom:8px">{{ n.task_status ? statusLabel(n) : '空闲' }}</div>
+                        <div v-if="n.task_progress && n.task_status==='filling_cart'" style="margin-bottom:6px">
+                            <el-progress :percentage="progressPct(n)" :show-text="false" :stroke-width="4" />
                         </div>
-                        <div v-if="n.task_progress && n.task_status === 'filling_cart'" style="margin-top:10px">
-                            <div style="display:flex;justify-content:space-between;font-size:12px;color:#666;margin-bottom:4px">
-                                <span>已加购 {{ n.task_progress.items_added || 0 }} 件</span>
-                                <span>¥{{ (n.task_progress.local_amount||0).toFixed(2) }} / ¥{{ n.task_progress.target_amount||0 }}</span>
-                            </div>
-                            <el-progress :percentage="progressPct(n)" :show-text="false" :stroke-width="6" />
-                        </div>
-                        <div style="margin-top:14px;display:flex;gap:6px;border-top:1px solid #eee;padding-top:12px;flex-wrap:wrap">
-                            <el-button size="small" @click="editNodeInfo(n)">详情</el-button>
-                            <el-button size="small" @click="openConfig(n)">采购配置</el-button>
-                            <el-button v-if="n.online" size="small" @click="updateNodeCode(n.id)">更新代码</el-button>
-                            <el-button v-if="n.online && (!n.task_status || ['idle','completed','failed','cancelled'].includes(n.task_status))" type="success" size="small" @click="startTask(n.id)">启动</el-button>
-                            <el-button v-if="n.online && n.task_status === 'awaiting_approval'" type="warning" size="small" @click="approveCheckout(n.task_id)">确认结算</el-button>
-                            <el-button v-if="n.online && n.task_status && !['idle','completed','failed','cancelled','awaiting_approval'].includes(n.task_status)" type="danger" size="small" @click="stopTask(n.id)">停止</el-button>
-                            <el-button size="small" :type="showLogs[n.id] ? 'primary' : ''" @click="toggleLog(n.id)" plain>日志</el-button>
-                        </div>
-                        <div class="log-box" v-if="showLogs[n.id]" :ref="el => logRefs[n.id] = el">
-                            <div class="log-line" :class="l.level" v-for="(l,i) in (nodeLogs[n.id]||[]).slice(-100)" :key="i">{{ l.message }}</div>
+                        <div style="display:flex;gap:4px;flex-wrap:wrap">
+                            <el-button size="small" @click.stop="editNodeInfo(n)">详情</el-button>
+                            <el-button size="small" @click.stop="openConfig(n)">配置</el-button>
+                            <el-button v-if="n.online && (!n.task_status || ['idle','completed','failed','cancelled'].includes(n.task_status))" type="success" size="small" @click.stop="startTask(n.id)">启动</el-button>
+                            <el-button v-if="n.online && n.task_status==='awaiting_approval'" type="warning" size="small" @click.stop="approveCheckout(n.task_id)">确认结算</el-button>
+                            <el-button v-if="n.online && n.task_status && !['idle','completed','failed','cancelled','awaiting_approval'].includes(n.task_status)" type="danger" size="small" @click.stop="stopTask(n.id)">停止</el-button>
                         </div>
                     </div>
+                </div>
+
+                <!-- 下半区：选中节点的日志面板 -->
+                <div v-if="selectedLogNode" style="margin-top:12px;background:#fff;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,0.08);display:flex;flex-direction:column;height:calc(100vh - 360px);min-height:300px">
+                    <!-- 日志工具栏 -->
+                    <div style="padding:12px 16px;border-bottom:1px solid #ebeef5;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+                        <span style="font-size:13px;font-weight:600;color:#333">{{ (nodes[selectedLogNode]||{}).name || selectedLogNode }}</span>
+                        <div style="display:flex;gap:4px">
+                            <el-button :type="logViewMode==='event'?'primary':''" size="small" @click="logViewMode='event'" plain>事件</el-button>
+                            <el-button :type="logViewMode==='runtime'?'primary':''" size="small" @click="logViewMode='runtime'" plain>运行</el-button>
+                            <el-button :type="logViewMode==='all'?'primary':''" size="small" @click="logViewMode='all'" plain>全部</el-button>
+                        </div>
+                        <el-select v-model="logLevelFilter" placeholder="全部级别" clearable size="small" style="width:100px">
+                            <el-option label="INFO" value="INFO" />
+                            <el-option label="WARNING" value="WARNING" />
+                            <el-option label="ERROR" value="ERROR" />
+                        </el-select>
+                        <el-input v-model="logSearchText" placeholder="搜索日志..." size="small" clearable style="width:180px" />
+                        <div style="flex:1"></div>
+                        <el-button v-if="!logAutoScroll" size="small" type="primary" @click="logAutoScroll=true">回到最新</el-button>
+                        <span v-if="logAutoScroll" style="font-size:11px;color:#67c23a">自动跟随</span>
+                        <span v-else style="font-size:11px;color:#e6a23c">已暂停</span>
+                    </div>
+                    <!-- 日志内容 -->
+                    <div ref="logPanelRef" style="flex:1;overflow-y:auto;padding:8px 0;font-family:'Courier New',monospace;font-size:12px;line-height:1.8;background:#1a1a2e" @scroll="onLogScroll">
+                        <div v-for="(l,i) in filteredLogs" :key="i"
+                             :style="{padding:'2px 16px',color:logColor(l),background:l.event_type==='event'?'rgba(64,158,255,0.08)':'transparent',borderLeft:l.level==='ERROR'?'3px solid #f56c6c':l.level==='WARNING'?'3px solid #e6a23c':l.event_type==='event'?'3px solid #409eff':'3px solid transparent'}">
+                            <span style="color:#666;margin-right:8px">{{ (l.timestamp||'').slice(11,19) }}</span>
+                            <span v-if="l.phase" style="color:#909399;margin-right:6px">[{{ l.phase }}]</span>
+                            <span>{{ l.message }}</span>
+                        </div>
+                        <div v-if="filteredLogs.length===0" style="text-align:center;padding:40px;color:#666">暂无日志</div>
+                    </div>
+                </div>
+                <div v-if="!selectedLogNode && nodeList.length > 0" style="margin-top:20px;text-align:center;padding:40px;color:#999;background:#fff;border-radius:10px">
+                    点击上方节点卡片查看日志
                 </div>
             </template>
 
@@ -1042,6 +1068,56 @@ const app = createApp({
             }
         }, true);
 
+        // 日志面板
+        const selectedLogNode = ref('');
+        const logViewMode = ref('event');
+        const logLevelFilter = ref('');
+        const logSearchText = ref('');
+        const logAutoScroll = ref(true);
+        const logPanelRef = ref(null);
+
+        function selectLogNode(nodeId) {
+            selectedLogNode.value = selectedLogNode.value === nodeId ? '' : nodeId;
+            logAutoScroll.value = true;
+        }
+
+        const filteredLogs = computed(() => {
+            const nid = selectedLogNode.value;
+            if (!nid) return [];
+            const logs = nodeLogs[nid] || [];
+            return logs.filter(l => {
+                if (logViewMode.value === 'event' && l.event_type !== 'event') return false;
+                if (logViewMode.value === 'runtime' && l.event_type === 'raw') return false;
+                if (logLevelFilter.value && l.level !== logLevelFilter.value) return false;
+                if (logSearchText.value && !(l.message || '').includes(logSearchText.value)) return false;
+                return true;
+            });
+        });
+
+        function logColor(l) {
+            if (l.level === 'ERROR') return '#f87171';
+            if (l.level === 'WARNING') return '#fbbf24';
+            if (l.event_type === 'event') return '#93c5fd';
+            return '#a5b4fc';
+        }
+
+        function onLogScroll() {
+            const el = logPanelRef.value;
+            if (!el) return;
+            const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 50;
+            logAutoScroll.value = atBottom;
+        }
+
+        // 日志自动滚动
+        watch(filteredLogs, () => {
+            if (logAutoScroll.value) {
+                nextTick(() => {
+                    const el = logPanelRef.value;
+                    if (el) el.scrollTop = el.scrollHeight;
+                });
+            }
+        }, {deep: true});
+
         // 审计日志
         const auditLogs = ref([]);
         async function loadAuditLogs() {
@@ -1074,6 +1150,8 @@ const app = createApp({
             showAddNode, newNode, addNode,
             showNodeResult, nodeResultJson, copyNodeResult,
             showEditNode, editNode, editNodeInfo, saveNodeInfo,
+            selectedLogNode, selectLogNode, logViewMode, logLevelFilter, logSearchText,
+            logAutoScroll, logPanelRef, filteredLogs, logColor, onLogScroll,
             updateNodeCode, deleteNode, startTask, stopTask, approveCheckout, rejectCheckout,
             showConfig, configTitle, configForm, imageList, shopList,
             openConfig, saveConfig, onFileChange, onDrop, onSelectExisting,
