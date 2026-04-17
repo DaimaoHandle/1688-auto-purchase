@@ -215,10 +215,12 @@ class PurchaseWorker:
                 self._send_status(STATUS_CANCELLED)
                 return
 
-            # 加购
+            # 加购（注入 shop_name 用于采购去重）
             self._send_status(STATUS_FILLING_CART, "开始加购...")
+            cart_cfg = config.get("cart", {})
+            cart_cfg["_shop_name"] = config.get("search", {}).get("target_shop_name", "")
             added = run_cart_filling(
-                context, shop_page, config.get("cart", {}),
+                context, shop_page, cart_cfg,
                 progress_callback=self._send_progress,
                 cancel_check=self._is_cancelled,
             )
@@ -245,7 +247,8 @@ class PurchaseWorker:
             self._send_status(STATUS_CHECKING_OUT, "开始结算...")
             order_limit = config.get("cart", {}).get("order_limit", 500)
             shipping_reserve = config.get("cart", {}).get("shipping_reserve", 15)
-            orders, actual_amount = run_cart_checkout(context, order_limit=order_limit, shipping_reserve=shipping_reserve)
+            _shop_name = config.get("search", {}).get("target_shop_name", "")
+            orders, actual_amount = run_cart_checkout(context, order_limit=order_limit, shipping_reserve=shipping_reserve, shop_name=_shop_name)
 
             self._send_status(STATUS_COMPLETED, f"完成！{added} 件商品，{orders} 笔订单，¥{actual_amount:.2f}")
 

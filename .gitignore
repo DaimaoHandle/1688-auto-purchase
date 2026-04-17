@@ -22,8 +22,9 @@ reports/
 # Docker
 .dockerignore
 
-# 服务器数据
+# 运行时数据
 server/data/
+data/
 
 # Agent 配置（含 token，不应提交）
 agent/agent_config.json

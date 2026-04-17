@@ -52,7 +52,8 @@ def main():
         shop_name = config["search"]["target_shop_name"]
         shop_page = find_shop_and_enter(context, result_page, shop_name)
 
-        # 填充采购车
+        # 填充采购车（注入 shop_name 用于采购去重）
+        config["cart"]["_shop_name"] = shop_name
         added = run_cart_filling(context, shop_page, config["cart"])
 
         logger.info(f"加购完成，共加入 {added} 件商品")
@@ -75,7 +76,7 @@ def main():
         # 结算：分组下单，每单不超过限额（预留运费空间）
         order_limit = config.get("cart", {}).get("order_limit", 500)
         shipping_reserve = config.get("cart", {}).get("shipping_reserve", 15)
-        orders, actual_amount = run_cart_checkout(context, order_limit=order_limit, shipping_reserve=shipping_reserve)
+        orders, actual_amount = run_cart_checkout(context, order_limit=order_limit, shipping_reserve=shipping_reserve, shop_name=shop_name)
 
         logger.info("=" * 60)
         logger.info(f"任务完成！共加入 {added} 件商品，生成 {orders} 笔订单")

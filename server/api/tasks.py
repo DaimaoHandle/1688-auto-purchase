@@ -9,6 +9,7 @@ from typing import Optional
 
 from server.db.database import get_db
 from server.services.node_manager import node_manager
+from server.api.audit import log_action
 from shared.protocol import (
     make_message, MSG_START_TASK, MSG_STOP_TASK, MSG_APPROVE_CHECKOUT, MSG_REJECT_CHECKOUT, MSG_UPDATE_CODE,
 )
@@ -17,7 +18,7 @@ router = APIRouter(prefix="/api/tasks", tags=["tasks"])
 
 
 @router.post("/nodes/{node_id}/start")
-async def start_task(node_id: str, request: Request):
+async def start_task(node_id: str, request: Request = None):
     """向指定节点发送启动任务指令。使用该节点在数据库中存储的配置和图片。"""
     node = node_manager.get(node_id)
     if not node:
@@ -63,12 +64,13 @@ async def start_task(node_id: str, request: Request):
     }))
 
     node_manager.update_task_status(node_id, task_id, "starting")
+    await log_action(request, "启动任务", node_id, f"task_id={task_id}")
 
     return {"task_id": task_id}
 
 
 @router.post("/nodes/{node_id}/stop")
-async def stop_task(node_id: str):
+async def stop_task(node_id: str, request: Request = None):
     """向指定节点发送停止任务指令。"""
     node = node_manager.get(node_id)
     if not node:
@@ -79,6 +81,7 @@ async def stop_task(node_id: str):
     await node.ws.send_text(make_message(MSG_STOP_TASK, {
         "task_id": node.current_task_id or "",
     }))
+    await log_action(request, "停止任务", node_id)
 
     return {"ok": True}
 

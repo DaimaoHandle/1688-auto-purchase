@@ -17,6 +17,7 @@ from server.api.images import router as images_router
 from server.api.reports import router as reports_router
 from server.api.auth import router as auth_router, get_current_user
 from server.api.users import router as users_router
+from server.api.audit import router as audit_router
 from server.services.node_manager import node_manager
 from shared.protocol import parse_message, make_message, MSG_STATUS_UPDATE
 
@@ -65,6 +66,7 @@ def create_app() -> FastAPI:
     app.include_router(configs_router)
     app.include_router(images_router)
     app.include_router(reports_router)
+    app.include_router(audit_router)
 
     # Agent WebSocket 端点
     @app.websocket("/ws/agent")

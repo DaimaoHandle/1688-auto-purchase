@@ -105,6 +105,7 @@ html, body, #app { height: 100%; margin: 0; }
                     <span>系统设置</span>
                 </template>
                 <el-menu-item index="users">用户管理</el-menu-item>
+                <el-menu-item index="audit">操作日志</el-menu-item>
             </el-sub-menu>
         </el-menu>
     </div>
@@ -294,6 +295,38 @@ html, body, #app { height: 100%; margin: 0; }
                             <el-button size="small" type="danger" @click="deleteUser(u.id)" :disabled="u.role === 'admin'">删除</el-button>
                         </div>
                     </el-card>
+                </div>
+            </template>
+
+            <!-- 操作日志 -->
+            <template v-if="currentPage === 'audit'">
+                <div style="background:#fff;border-radius:8px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.08)">
+                    <div style="font-size:14px;font-weight:600;margin-bottom:16px">操作日志</div>
+                    <div style="overflow-x:auto">
+                    <table class="report-table" style="width:100%;border-collapse:collapse;font-size:13px">
+                        <thead>
+                            <tr style="background:#fafafa;border-bottom:2px solid #ebeef5">
+                                <th style="padding:10px 12px;text-align:left;white-space:nowrap">时间</th>
+                                <th style="padding:10px 12px;text-align:left;white-space:nowrap">操作人</th>
+                                <th style="padding:10px 12px;text-align:left;white-space:nowrap">操作</th>
+                                <th style="padding:10px 12px;text-align:left;white-space:nowrap">节点</th>
+                                <th style="padding:10px 12px;text-align:left;white-space:nowrap">详情</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="log in auditLogs" :key="log.id" style="border-bottom:1px solid #ebeef5">
+                                <td style="padding:8px 12px;white-space:nowrap">{{ log.created_at }}</td>
+                                <td style="padding:8px 12px">{{ log.user_name }}</td>
+                                <td style="padding:8px 12px">{{ log.action }}</td>
+                                <td style="padding:8px 12px">{{ log.node_id || '-' }}</td>
+                                <td style="padding:8px 12px;color:#999">{{ log.detail || '-' }}</td>
+                            </tr>
+                            <tr v-if="auditLogs.length === 0">
+                                <td colspan="5" style="padding:40px;text-align:center;color:#999">暂无操作日志</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    </div>
                 </div>
             </template>
 
@@ -735,7 +768,7 @@ const app = createApp({
             completed:'已完成', failed:'异常', cancelled:'已取消',
         };
 
-        const pageTitle = computed(() => ({dashboard:'总览', nodes:'节点管理', tasks:'任务中心', data:'数据中心', users:'用户管理'}[currentPage.value] || ''));
+        const pageTitle = computed(() => ({dashboard:'总览', nodes:'节点管理', tasks:'任务中心', data:'数据中心', users:'用户管理', audit:'操作日志'}[currentPage.value] || ''));
         const nodeList = computed(() => Object.values(nodes));
         const onlineCount = computed(() => nodeList.value.filter(n => n.online).length);
         const activeCount = computed(() => nodeList.value.filter(n => n.online && n.task_status && !['idle','completed','failed','cancelled'].includes(n.task_status)).length);
@@ -1009,10 +1042,17 @@ const app = createApp({
             }
         }, true);
 
+        // 审计日志
+        const auditLogs = ref([]);
+        async function loadAuditLogs() {
+            try { const res = await fetch('/api/audit'); if (res.ok) auditLogs.value = await res.json(); } catch(e) {}
+        }
+
         function onMenuSelect(index) {
             currentPage.value = index;
             if (index === 'data') loadReports();
             if (index === 'users') loadUsers();
+            if (index === 'audit') loadAuditLogs();
         }
 
         onMounted(async () => {
@@ -1038,6 +1078,7 @@ const app = createApp({
             showConfig, configTitle, configForm, imageList, shopList,
             openConfig, saveConfig, onFileChange, onDrop, onSelectExisting,
             reportSummary, reportList, reportFilter, reportLoading, loadReports, exportReports,
+            auditLogs,
             onMenuSelect,
         };
     }

@@ -1,6 +1,10 @@
 import logging
 from src.utils import parse_price, save_screenshot, random_delay
 from src.shop import get_shop_items, go_to_next_page, enter_new_product_zone, select_today_new_products, get_new_product_items, click_sort_by_sales
+from src.purchase_history import is_purchased, mark_batch_purchased, extract_offer_id, get_purchased_count
+
+# 当前任务中已加购的 offer_ids（提交订单后标记为已采购）
+_pending_offer_ids = []
 from src.selector_health import try_selectors, get_tracker
 from src.retry import CircuitBreaker, is_page_alive, check_for_verification, wait_for_verification_clear, try_refresh_page
 
@@ -625,15 +629,16 @@ def _click_add_to_cart(detail_page) -> bool:
         return False
 
 
-def add_item_to_cart(context, item_el, shop_page=None) -> float:
+def add_item_to_cart(context, item_el, shop_page=None, shop_name: str = "") -> float:
     """
     完整的加购流程：
     1. 点击商品图片/标题，打开详情页（新标签或当前页跳转）
-    2. 选择规格
-    3. 调整数量为 1
-    4. 读取商品价格
-    5. 点击"加入采购车"
-    6. 处理弹窗，关闭/返回详情页
+    2. 检查是否已采购过（去重）
+    3. 选择规格
+    4. 调整数量为 1
+    5. 读取商品价格
+    6. 点击"加入采购车"
+    7. 处理弹窗，关闭/返回详情页
 
     返回值：加购成功返回商品价格（>0），失败返回 0.0
     """
@@ -668,6 +673,12 @@ def add_item_to_cart(context, item_el, shop_page=None) -> float:
             logger.warning(f"详情页标题异常，跳过: {title}")
             return 0.0
 
+        # 采购去重：检查此商品是否已采购过
+        offer_id = extract_offer_id(detail_page.url)
+        if offer_id and shop_name and is_purchased(shop_name, offer_id):
+            logger.info(f"商品 {offer_id} 已采购过，跳过")
+            return 0.0
+
         # 若有规格选项先选规格
         _select_first_sku(detail_page)
         random_delay(0.3, 0.6)
@@ -692,6 +703,10 @@ def add_item_to_cart(context, item_el, shop_page=None) -> float:
         _confirm_popup(detail_page)
         random_delay(0.3, 0.6)
         _close_popup(detail_page)
+
+        # 记录 offerId 到待标记列表
+        if offer_id:
+            _pending_offer_ids.append(offer_id)
 
         return item_price
 
@@ -723,7 +738,8 @@ def add_item_to_cart(context, item_el, shop_page=None) -> float:
 
 def _fill_cart_from_current_page(context, shop_page, cart_config, added_count, local_amount,
                                   last_verified_amount, verify_interval,
-                                  progress_callback=None, cancel_check=None, label=""):
+                                  progress_callback=None, cancel_check=None, label="",
+                                  shop_name: str = ""):
     """
     从当前页面的商品列表中加购，翻页直到达到目标或无更多商品。
     返回 (added_count, local_amount)。
@@ -818,7 +834,7 @@ def _fill_cart_from_current_page(context, shop_page, cart_config, added_count, l
             if check_for_verification(shop_page):
                 wait_for_verification_clear(shop_page)
 
-            item_price = add_item_to_cart(context, item_el, shop_page=shop_page)
+            item_price = add_item_to_cart(context, item_el, shop_page=shop_page, shop_name=shop_name)
             if item_price > 0:
                 added_count += 1
                 local_amount += item_price
@@ -869,9 +885,12 @@ def run_cart_filling(context, shop_page, cart_config: dict, progress_callback=No
     strategy = cart_config.get("amount_strategy", "not_exceed")
     max_items = cart_config.get("max_items", 200)
     purchase_mode = cart_config.get("purchase_mode", "normal")
+    _shop_name = cart_config.get("_shop_name", "")  # 由调用方注入
     verify_interval = 500  # 每累计约 ¥500 校准一次
 
     logger.info(f"开始填充采购车 | 目标金额: ¥{target} | 策略: {strategy} | 模式: {purchase_mode}")
+    if _shop_name:
+        logger.info(f"采购去重已启用，已有 {get_purchased_count()} 条历史记录")
 
     added_count = 0
     local_amount = 0.0          # 程序本地累计金额
@@ -894,7 +913,7 @@ def run_cart_filling(context, shop_page, cart_config: dict, progress_callback=No
             added_count, local_amount = _fill_cart_from_current_page(
                 context, new_product_page, cart_config, added_count, local_amount,
                 last_verified_amount, verify_interval, progress_callback, cancel_check,
-                label="新品"
+                label="新品", shop_name=_shop_name
             )
 
             # 关闭新品标签页（如果是新开的）
@@ -933,7 +952,8 @@ def run_cart_filling(context, shop_page, cart_config: dict, progress_callback=No
     # 全部商品采购（正常模式直接走这里，新品模式不足时也走这里）
     added_count, local_amount = _fill_cart_from_current_page(
         context, shop_page, cart_config, added_count, local_amount,
-        last_verified_amount, verify_interval, progress_callback, cancel_check
+        last_verified_amount, verify_interval, progress_callback, cancel_check,
+        shop_name=_shop_name
     )
 
     logger.info(f"采购车填充完成，共加入 {added_count} 件商品，本地累计: ¥{local_amount:.2f}")
@@ -1492,7 +1512,7 @@ def _adjust_group_to_fit(cart_page, group_indices: list, all_items: list, order_
     return final if final > 0 and final <= order_limit else -1.0
 
 
-def run_cart_checkout(context, order_limit: float = 500.0, shipping_reserve: float = 15.0):
+def run_cart_checkout(context, order_limit: float = 500.0, shipping_reserve: float = 15.0, shop_name: str = ""):
     """
     采购车结算：预读价格 → 贪心分组 → 每组鼠标勾选 → 结算 → 提交订单。
 
@@ -1652,6 +1672,11 @@ def run_cart_checkout(context, order_limit: float = 500.0, shipping_reserve: flo
             cart_page.close()
         except Exception:
             pass
+
+    # 结算完成，将已加购的商品标记为已采购
+    if order_count > 0 and _pending_offer_ids and shop_name:
+        mark_batch_purchased(shop_name, list(_pending_offer_ids))
+    _pending_offer_ids.clear()
 
     logger.info("=" * 60)
     logger.info(f"结算完成！共生成 {order_count} 笔订单，实际采购金额 ¥{total_actual_amount:.2f}")
