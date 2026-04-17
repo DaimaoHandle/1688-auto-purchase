@@ -10,7 +10,7 @@ from typing import Optional
 from server.db.database import get_db
 from server.services.node_manager import node_manager
 from shared.protocol import (
-    make_message, MSG_START_TASK, MSG_STOP_TASK, MSG_APPROVE_CHECKOUT, MSG_REJECT_CHECKOUT,
+    make_message, MSG_START_TASK, MSG_STOP_TASK, MSG_APPROVE_CHECKOUT, MSG_REJECT_CHECKOUT, MSG_UPDATE_CODE,
 )
 
 router = APIRouter(prefix="/api/tasks", tags=["tasks"])
@@ -106,3 +106,16 @@ async def reject_checkout(task_id: str):
             }))
             return {"ok": True}
     raise HTTPException(404, "未找到对应节点或节点离线")
+
+
+@router.post("/nodes/{node_id}/update")
+async def update_node_code(node_id: str):
+    """向指定节点发送代码更新指令（git pull）。"""
+    node = node_manager.get(node_id)
+    if not node:
+        raise HTTPException(404, "节点不存在")
+    if not node.online or not node.ws:
+        raise HTTPException(400, "节点离线")
+
+    await node.ws.send_text(make_message(MSG_UPDATE_CODE, {}))
+    return {"ok": True}

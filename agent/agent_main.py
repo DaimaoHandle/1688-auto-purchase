@@ -16,7 +16,7 @@ from agent.ws_client import AgentWSClient
 from agent.worker import PurchaseWorker
 from agent.log_interceptor import WSLogHandler
 from shared.protocol import (
-    MSG_START_TASK, MSG_STOP_TASK, MSG_APPROVE_CHECKOUT, MSG_REJECT_CHECKOUT,
+    MSG_START_TASK, MSG_STOP_TASK, MSG_APPROVE_CHECKOUT, MSG_REJECT_CHECKOUT, MSG_UPDATE_CODE,
 )
 
 # 配置日志
@@ -108,6 +108,26 @@ async def main():
                 elif msg_type == MSG_REJECT_CHECKOUT:
                     logger.info("收到拒绝结算指令")
                     worker.reject_checkout()
+
+                elif msg_type == MSG_UPDATE_CODE:
+                    logger.info("收到代码更新指令，执行 git pull...")
+                    import subprocess
+                    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                    result = subprocess.run(
+                        ["git", "pull"], cwd=project_root,
+                        capture_output=True, text=True, timeout=30
+                    )
+                    logger.info(f"git pull: {result.stdout.strip()}")
+                    if result.returncode == 0:
+                        logger.info("代码更新成功，请重启 Agent 生效")
+                        # 发送状态通知
+                        from shared.protocol import make_message, MSG_STATUS_UPDATE
+                        await client.send(make_message(MSG_STATUS_UPDATE, {
+                            "task_id": "", "status": "updated",
+                            "message": f"代码已更新: {result.stdout.strip()}"
+                        }))
+                    else:
+                        logger.warning(f"git pull 失败: {result.stderr.strip()}")
 
                 else:
                     logger.debug(f"未知消息类型: {msg_type}")

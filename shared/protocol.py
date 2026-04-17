@@ -21,6 +21,9 @@ MSG_STOP_TASK = "stop_task"
 MSG_APPROVE_CHECKOUT = "approve_checkout"
 MSG_REJECT_CHECKOUT = "reject_checkout"
 
+# 管理指令（Server → Agent）
+MSG_UPDATE_CODE = "update_code"
+
 # 状态上报（Agent → Server）
 MSG_STATUS_UPDATE = "status_update"
 MSG_PROGRESS_UPDATE = "progress_update"

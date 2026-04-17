@@ -75,7 +75,7 @@ def main():
         # 结算：分组下单，每单不超过限额（预留运费空间）
         order_limit = config.get("cart", {}).get("order_limit", 500)
         shipping_reserve = config.get("cart", {}).get("shipping_reserve", 15)
-        orders = run_cart_checkout(context, order_limit=order_limit, shipping_reserve=shipping_reserve)
+        orders, actual_amount = run_cart_checkout(context, order_limit=order_limit, shipping_reserve=shipping_reserve)
 
         logger.info("=" * 60)
         logger.info(f"任务完成！共加入 {added} 件商品，生成 {orders} 笔订单")

@@ -122,6 +122,7 @@ class PurchaseWorker:
         playwright_obj = context = page = None
         added = 0
         orders = 0
+        actual_amount = 0.0
         errors = []
         image_path = None
 
@@ -244,9 +245,9 @@ class PurchaseWorker:
             self._send_status(STATUS_CHECKING_OUT, "开始结算...")
             order_limit = config.get("cart", {}).get("order_limit", 500)
             shipping_reserve = config.get("cart", {}).get("shipping_reserve", 15)
-            orders = run_cart_checkout(context, order_limit=order_limit, shipping_reserve=shipping_reserve)
+            orders, actual_amount = run_cart_checkout(context, order_limit=order_limit, shipping_reserve=shipping_reserve)
 
-            self._send_status(STATUS_COMPLETED, f"完成！{added} 件商品，{orders} 笔订单")
+            self._send_status(STATUS_COMPLETED, f"完成！{added} 件商品，{orders} 笔订单，¥{actual_amount:.2f}")
 
         except Exception as e:
             logger.error(f"任务异常: {e}", exc_info=True)
@@ -258,6 +259,7 @@ class PurchaseWorker:
                 "task_id": task_id,
                 "shop_name": config.get("search", {}).get("target_shop_name", ""),
                 "target_amount": config.get("cart", {}).get("target_amount", 0),
+                "actual_amount": actual_amount,
                 "items_added": added,
                 "orders_created": orders,
                 "errors": errors,

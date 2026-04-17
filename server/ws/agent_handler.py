@@ -142,7 +142,7 @@ async def agent_ws_endpoint(websocket: WebSocket):
                          buyer_info,
                          payload.get("items_added", 0),
                          payload.get("orders_created", 0),
-                         0.0,  # actual_amount: 后续从结算结果获取
+                         payload.get("actual_amount", 0),
                          payload.get("target_amount", 0),
                          json.dumps(payload.get("errors", []), ensure_ascii=False),
                          json.dumps(payload, ensure_ascii=False))

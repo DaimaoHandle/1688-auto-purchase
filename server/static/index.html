@@ -243,6 +243,7 @@ html, body, #app { height: 100%; margin: 0; }
                         <div style="margin-top:14px;display:flex;gap:6px;border-top:1px solid #eee;padding-top:12px;flex-wrap:wrap">
                             <el-button size="small" @click="editNodeInfo(n)">详情</el-button>
                             <el-button size="small" @click="openConfig(n)">采购配置</el-button>
+                            <el-button v-if="n.online" size="small" @click="updateNodeCode(n.id)">更新代码</el-button>
                             <el-button v-if="n.online && (!n.task_status || ['idle','completed','failed','cancelled'].includes(n.task_status))" type="success" size="small" @click="startTask(n.id)">启动</el-button>
                             <el-button v-if="n.online && n.task_status === 'awaiting_approval'" type="warning" size="small" @click="approveCheckout(n.task_id)">确认结算</el-button>
                             <el-button v-if="n.online && n.task_status && !['idle','completed','failed','cancelled','awaiting_approval'].includes(n.task_status)" type="danger" size="small" @click="stopTask(n.id)">停止</el-button>
@@ -876,6 +877,14 @@ const app = createApp({
             } catch(e) { ElementPlus.ElMessage.error(e.message); }
         }
 
+        async function updateNodeCode(nodeId) {
+            try {
+                const res = await fetch('/api/tasks/nodes/' + nodeId + '/update', {method:'POST'});
+                if (res.ok) ElementPlus.ElMessage.success('已发送更新指令，Agent 将执行 git pull');
+                else { const d = await res.json(); ElementPlus.ElMessage.error(d.detail || '发送失败'); }
+            } catch(e) { ElementPlus.ElMessage.error(e.message); }
+        }
+
         async function deleteNode(id) {
             try { await ElementPlus.ElMessageBox.confirm('确认删除此节点？', '删除'); } catch { return; }
             await fetch('/api/nodes/' + id, {method:'DELETE'});
@@ -1025,7 +1034,7 @@ const app = createApp({
             showAddNode, newNode, addNode,
             showNodeResult, nodeResultJson, copyNodeResult,
             showEditNode, editNode, editNodeInfo, saveNodeInfo,
-            deleteNode, startTask, stopTask, approveCheckout, rejectCheckout,
+            updateNodeCode, deleteNode, startTask, stopTask, approveCheckout, rejectCheckout,
             showConfig, configTitle, configForm, imageList, shopList,
             openConfig, saveConfig, onFileChange, onDrop, onSelectExisting,
             reportSummary, reportList, reportFilter, reportLoading, loadReports, exportReports,

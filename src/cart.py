@@ -1542,6 +1542,7 @@ def run_cart_checkout(context, order_limit: float = 500.0, shipping_reserve: flo
 
     # 4. 逐组结算
     order_count = 0
+    total_actual_amount = 0.0
     for i, group in enumerate(groups):
         gtotal = sum(it['price'] for it in group)
         group_indices = [it['index'] for it in group]
@@ -1630,11 +1631,15 @@ def run_cart_checkout(context, order_limit: float = 500.0, shipping_reserve: flo
                 cart_page.wait_for_timeout(2000)
                 logger.info(f"订单 {i+1} 提交成功: {cart_page.url}")
                 order_count += 1
-                print(f"    订单 {i+1} 提交成功！")
+                if real_amount > 0:
+                    total_actual_amount += real_amount
+                print(f"    订单 {i+1} 提交成功！金额 ¥{real_amount:.2f}")
             except Exception:
                 logger.warning(f"订单 {i+1} 提交后未检测到跳转，可能已成功")
                 save_screenshot(cart_page, f"submit_no_redirect_{i+1}")
                 order_count += 1
+                if real_amount > 0:
+                    total_actual_amount += real_amount
         else:
             logger.warning(f"订单 {i+1} 提交订单按钮点击失败")
             save_screenshot(cart_page, f"submit_fail_{i+1}")
@@ -1649,7 +1654,7 @@ def run_cart_checkout(context, order_limit: float = 500.0, shipping_reserve: flo
             pass
 
     logger.info("=" * 60)
-    logger.info(f"结算完成！共生成 {order_count} 笔订单")
+    logger.info(f"结算完成！共生成 {order_count} 笔订单，实际采购金额 ¥{total_actual_amount:.2f}")
     logger.info("=" * 60)
-    print(f"\n  结算完成！共生成 {order_count} 笔订单\n")
-    return order_count
+    print(f"\n  结算完成！{order_count} 笔订单，实际金额 ¥{total_actual_amount:.2f}\n")
+    return order_count, total_actual_amount
