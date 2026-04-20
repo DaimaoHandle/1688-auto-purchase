@@ -431,12 +431,60 @@ class PurchaseWorker:
             page.wait_for_timeout(2000)
 
     def _do_logged_in(self):
-        """获取采购车 URL。"""
+        """获取采购车 URL，检查并清空残留商品。"""
         page = self.runtime["page"]
-        from src.cart import capture_cart_url, set_cart_url
+        context = self.runtime["context"]
+        from src.cart import capture_cart_url, set_cart_url, _open_cart_in_new_tab, _mouse_click_select_all, _read_bottom_bar_amount, _confirm_popup
+
         cart_url = capture_cart_url(page)
         if cart_url:
             set_cart_url(cart_url)
+
+            # 检查采购车是否有残留商品，如果有则清空
+            logger.info("检查采购车是否有残留商品...")
+            try:
+                cart_page = _open_cart_in_new_tab(context)
+                if cart_page:
+                    cart_page.wait_for_timeout(3000)
+                    amount = _read_bottom_bar_amount(cart_page)
+
+                    if amount > 0:
+                        logger.info(f"采购车有残留商品（¥{amount:.2f}），正在清空...")
+                        # 全选
+                        coord = _mouse_click_select_all(cart_page)
+                        if coord:
+                            if not coord.get('checked'):
+                                cart_page.mouse.click(coord['x'], coord['y'])
+                                cart_page.wait_for_timeout(2000)
+
+                            # 点击删除
+                            deleted = cart_page.evaluate("""() => {
+                                var all = document.querySelectorAll('button, a, div, span');
+                                for (var i = 0; i < all.length; i++) {
+                                    var txt = String(all[i].innerText || '').trim();
+                                    if (txt === '删除') {
+                                        var r = all[i].getBoundingClientRect();
+                                        if (r.width > 20 && r.height > 15) {
+                                            all[i].click();
+                                            return true;
+                                        }
+                                    }
+                                }
+                                return false;
+                            }""")
+                            if deleted:
+                                cart_page.wait_for_timeout(2000)
+                                _confirm_popup(cart_page)
+                                cart_page.wait_for_timeout(2000)
+                                logger.info("已清空采购车残留商品")
+                            else:
+                                logger.warning("未找到删除按钮")
+                    else:
+                        logger.info("采购车为空，无需清理")
+
+                    cart_page.close()
+            except Exception as e:
+                logger.warning(f"清空采购车失败: {e}")
 
     def _do_searching(self):
         """以图搜图。"""
