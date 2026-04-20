@@ -3,8 +3,10 @@ from src.utils import parse_price, save_screenshot, random_delay
 from src.shop import get_shop_items, go_to_next_page, enter_new_product_zone, select_today_new_products, get_new_product_items, click_sort_by_sales
 from src.purchase_history import check_purchased_batch, mark_batch_purchased, extract_offer_id, extract_offer_id_from_href, get_purchased_count
 
-# 当前任务中已加购的 offer_ids（提交订单后标记为已采购）
+# 当前任务中已加购的 offer_ids
 _pending_offer_ids = []
+# 已成功提交订单的 offer_ids（只有这些才标记为已采购）
+_submitted_offer_ids = []
 from src.selector_health import try_selectors, get_tracker
 from src.retry import CircuitBreaker, is_page_alive, check_for_verification, wait_for_verification_clear, try_refresh_page
 
@@ -1695,6 +1697,8 @@ def run_cart_checkout(context, order_limit: float = 500.0, shipping_reserve: flo
                 order_count += 1
                 if real_amount > 0:
                     total_actual_amount += real_amount
+                # 记录本组商品为已提交
+                _submitted_offer_ids.extend([oid for oid in _pending_offer_ids if oid])
                 print(f"    订单 {i+1} 提交成功！金额 ¥{real_amount:.2f}")
             except Exception:
                 logger.warning(f"订单 {i+1} 提交后未检测到跳转，可能已成功")
@@ -1702,11 +1706,23 @@ def run_cart_checkout(context, order_limit: float = 500.0, shipping_reserve: flo
                 order_count += 1
                 if real_amount > 0:
                     total_actual_amount += real_amount
+                _submitted_offer_ids.extend([oid for oid in _pending_offer_ids if oid])
         else:
             logger.warning(f"订单 {i+1} 提交订单按钮点击失败")
             save_screenshot(cart_page, f"submit_fail_{i+1}")
 
         random_delay(1.0, 2.0)
+
+    # 结算完成，只标记已成功提交订单的商品为已采购
+    if _submitted_offer_ids and shop_name:
+        mark_batch_purchased(shop_name, list(set(_submitted_offer_ids)))
+        logger.info(f"已标记 {len(set(_submitted_offer_ids))} 个商品为已采购")
+    _pending_offer_ids.clear()
+    _submitted_offer_ids.clear()
+
+    # 清空采购车内剩余未结算的商品
+    if cart_page:
+        _clear_remaining_cart(cart_page, context)
 
     # 关闭采购车标签页
     if cart_page:
@@ -1715,13 +1731,77 @@ def run_cart_checkout(context, order_limit: float = 500.0, shipping_reserve: flo
         except Exception:
             pass
 
-    # 结算完成，将已加购的商品标记为已采购（通过管理端 API 共享给所有采购端）
-    if order_count > 0 and _pending_offer_ids and shop_name:
-        mark_batch_purchased(shop_name, list(_pending_offer_ids))
-    _pending_offer_ids.clear()
-
     logger.info("=" * 60)
     logger.info(f"结算完成！共生成 {order_count} 笔订单，实际采购金额 ¥{total_actual_amount:.2f}")
     logger.info("=" * 60)
     print(f"\n  结算完成！{order_count} 笔订单，实际金额 ¥{total_actual_amount:.2f}\n")
     return order_count, total_actual_amount
+
+
+def _clear_remaining_cart(cart_page, context):
+    """清空采购车内剩余的未结算商品。"""
+    logger.info("清空采购车剩余商品...")
+
+    try:
+        # 确保在采购车页面
+        if 'cart' not in cart_page.url:
+            cart_page = _open_cart_in_new_tab(context)
+            if not cart_page:
+                logger.warning("无法打开采购车，跳过清空")
+                return
+
+        # 点击全选
+        coord = _mouse_click_select_all(cart_page)
+        if coord:
+            if not coord.get('checked'):
+                cart_page.mouse.click(coord['x'], coord['y'])
+                cart_page.wait_for_timeout(2000)
+            logger.info("已全选剩余商品")
+        else:
+            logger.warning("未找到全选按钮，跳过清空")
+            return
+
+        # 检查是否有商品被选中
+        amount = _read_bottom_bar_amount(cart_page)
+        if amount <= 0:
+            logger.info("采购车已为空，无需清空")
+            return
+
+        # 点击删除按钮
+        deleted = cart_page.evaluate("""() => {
+            var all = document.querySelectorAll('button, a, div, span');
+            for (var i = 0; i < all.length; i++) {
+                var txt = String(all[i].innerText || '').trim();
+                if (txt === '删除' && all[i].closest('[class*="bottom-bar"], [class*="sticky"], [class*="batch"]')) {
+                    var r = all[i].getBoundingClientRect();
+                    if (r.width > 10 && r.height > 10) {
+                        all[i].click();
+                        return true;
+                    }
+                }
+            }
+            // 兜底：找任何文字为"删除"的可见按钮
+            for (var j = 0; j < all.length; j++) {
+                var txt2 = String(all[j].innerText || '').trim();
+                if (txt2 === '删除') {
+                    var r2 = all[j].getBoundingClientRect();
+                    if (r2.width > 20 && r2.height > 15) {
+                        all[j].click();
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }""")
+
+        if deleted:
+            cart_page.wait_for_timeout(2000)
+            # 可能弹出确认框
+            _confirm_popup(cart_page)
+            cart_page.wait_for_timeout(2000)
+            logger.info("已删除采购车剩余商品")
+        else:
+            logger.warning("未找到删除按钮")
+
+    except Exception as e:
+        logger.warning(f"清空采购车失败: {e}")
