@@ -66,6 +66,8 @@ async def main():
     log_handler.set_loop(loop)
     log_handler.setFormatter(logging.Formatter("%(message)s"))
     purchase_logger = logging.getLogger("1688-auto")
+    # 清除已有的 WSLogHandler（防止重启后重复）
+    purchase_logger.handlers = [h for h in purchase_logger.handlers if not isinstance(h, WSLogHandler)]
     purchase_logger.addHandler(log_handler)
 
     # 命令处理循环
