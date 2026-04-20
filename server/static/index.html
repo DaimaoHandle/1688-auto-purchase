@@ -538,10 +538,10 @@ html, body, #app { height: 100%; margin: 0; }
             </el-select>
         </el-form-item>
         <el-form-item label="采购模式">
-            <el-select v-model="configForm.purchaseMode" style="width:100%">
-                <el-option label="正常采购" value="normal" />
-                <el-option label="新品采购（优先当日上新）" value="new_product" />
-            </el-select>
+            <el-radio-group v-model="configForm.purchaseMode">
+                <el-radio value="normal">正常采购</el-radio>
+                <el-radio value="new_product">新品采购（优先当日上新）</el-radio>
+            </el-radio-group>
         </el-form-item>
         <el-form-item label="采购目标金额">
             <el-input-number v-model="configForm.targetAmount" :min="100" :step="500" style="width:100%" />
