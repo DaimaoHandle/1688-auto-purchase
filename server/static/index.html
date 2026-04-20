@@ -221,7 +221,10 @@ html, body, #app { height: 100%; margin: 0; }
                 <!-- 上半区：节点卡片 -->
                 <div style="margin-bottom:12px;display:flex;justify-content:space-between;align-items:center">
                     <span style="font-size:14px;font-weight:600">节点列表</span>
-                    <el-button type="primary" size="small" @click="showAddNode = true">添加节点</el-button>
+                    <div style="display:flex;gap:8px">
+                        <el-button size="small" @click="updateAllNodes">全部更新</el-button>
+                        <el-button type="primary" size="small" @click="showAddNode = true">添加节点</el-button>
+                    </div>
                 </div>
                 <div v-if="nodeList.length === 0" style="text-align:center;padding:40px;color:#999">暂无节点</div>
                 <div v-if="nodeList.length > 0" ref="nodesGridRef" style="display:flex;gap:12px;overflow-x:auto;padding-bottom:8px">
@@ -842,8 +845,10 @@ const app = createApp({
                 if (p.status === 'online') { nodes[nid].online = true; }
                 else if (p.status === 'offline') { nodes[nid].online = false; nodes[nid].task_status = null; }
                 else if (p.status === 'updated') {
+                    // 更新是瞬态通知，不存为任务状态
                     ElementPlus.ElNotification({title: (nodes[nid].name||nid) + ' 代码更新', message: p.message || '更新完成', type: 'success', duration: 5000});
                     nodeLogs[nid].push({level:'INFO', event_type:'event', phase:'更新', message: '代码更新: ' + (p.message||'完成'), timestamp: new Date().toISOString()});
+                    // 不设置 task_status，保持原有状态
                 }
                 else { nodes[nid].task_status = p.status; if (p.task_id) nodes[nid].task_id = p.task_id; }
             } else if (msg.type === 'progress_update') {
@@ -942,6 +947,23 @@ const app = createApp({
                     ElementPlus.ElMessage.error(d.detail || '保存失败');
                 }
             } catch(e) { ElementPlus.ElMessage.error(e.message); }
+        }
+
+        async function updateAllNodes() {
+            const onlineNodes = nodeList.value.filter(n => n.online);
+            if (onlineNodes.length === 0) {
+                ElementPlus.ElMessage.warning('没有在线节点');
+                return;
+            }
+            try { await ElementPlus.ElMessageBox.confirm('确认更新所有在线节点的代码？更新后节点将自动重启。', '全部更新'); } catch { return; }
+            let count = 0;
+            for (const n of onlineNodes) {
+                try {
+                    const res = await fetch('/api/nodes/' + n.id + '/update', {method:'POST'});
+                    if (res.ok) count++;
+                } catch(e) {}
+            }
+            ElementPlus.ElMessage.success('已向 ' + count + ' 个节点发送更新指令');
         }
 
         async function updateNodeCode(nodeId) {
@@ -1219,7 +1241,7 @@ const app = createApp({
             showEditNode, editNode, editNodeInfo, saveNodeInfo,
             selectedLogNode, selectLogNode, logViewMode, logLevelFilter, logSearchText,
             logAutoScroll, logPanelRef, filteredLogs, logColor, onLogScroll,
-            updateNodeCode, deleteNode, startTask, stopTask, approveCheckout, rejectCheckout,
+            updateAllNodes, updateNodeCode, deleteNode, startTask, stopTask, approveCheckout, rejectCheckout,
             showConfig, configTitle, configForm, imageList, shopList,
             openConfig, saveConfig, onFileChange, onDrop, onSelectExisting,
             reportSummary, reportList, reportFilter, reportLoading, loadReports, exportReports,

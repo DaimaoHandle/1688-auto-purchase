@@ -119,15 +119,23 @@ async def main():
                     )
                     logger.info(f"git pull: {result.stdout.strip()}")
                     if result.returncode == 0:
-                        logger.info("代码更新成功，请重启 Agent 生效")
-                        # 发送状态通知
                         from shared.protocol import make_message, MSG_STATUS_UPDATE
                         await client.send(make_message(MSG_STATUS_UPDATE, {
                             "task_id": "", "status": "updated",
-                            "message": f"代码已更新: {result.stdout.strip()}"
+                            "message": f"代码已更新: {result.stdout.strip()}，正在重启..."
                         }))
+                        await asyncio.sleep(1)
+                        # 重启自身
+                        logger.info("正在重启 Agent...")
+                        await client.stop()
+                        os.execv(sys.executable, [sys.executable] + sys.argv)
                     else:
                         logger.warning(f"git pull 失败: {result.stderr.strip()}")
+                        from shared.protocol import make_message, MSG_STATUS_UPDATE
+                        await client.send(make_message(MSG_STATUS_UPDATE, {
+                            "task_id": "", "status": "updated",
+                            "message": f"更新失败: {result.stderr.strip()}"
+                        }))
 
                 else:
                     logger.debug(f"未知消息类型: {msg_type}")
