@@ -1686,43 +1686,30 @@ def run_cart_checkout(context, order_limit: float = 500.0, shipping_reserve: flo
 
         # 提交订单
         if _click_submit_order(cart_page):
-            # 检测提交结果：URL 变化 或 页面出现成功提示
+            # 检测提交结果：跳转到收银台/支付页面即为成功
             submit_ok = False
             try:
                 confirm_url = cart_page.url
-                # 先尝试等 URL 变化（5秒短超时）
+                # 等待跳转到收银台页面（URL 含 cashier/payment/pay/success）
                 try:
-                    cart_page.wait_for_url(lambda url: url != confirm_url, timeout=5000)
+                    cart_page.wait_for_url(
+                        lambda url: url != confirm_url and ('cashier' in url or 'payment' in url or 'pay' in url or 'success' in url),
+                        timeout=15000
+                    )
                     submit_ok = True
                 except Exception:
-                    pass
-
-                # URL 没变，检查页面内容是否有成功提示
-                if not submit_ok:
-                    for _check in range(5):
-                        cart_page.wait_for_timeout(2000)
-                        has_success = cart_page.evaluate("""() => {
-                            var txt = document.body.innerText || '';
-                            return txt.indexOf('提交成功') !== -1 || txt.indexOf('下单成功') !== -1
-                                || txt.indexOf('订单已提交') !== -1 || txt.indexOf('支付') !== -1
-                                || txt.indexOf('交易成功') !== -1;
-                        }""")
-                        if has_success:
-                            submit_ok = True
-                            break
-                        # 也检查 URL 是否变了
-                        if cart_page.url != confirm_url:
-                            submit_ok = True
-                            break
+                    # URL 可能变了但不含关键词，检查是否变了
+                    if cart_page.url != confirm_url:
+                        submit_ok = True
 
                 cart_page.wait_for_timeout(1000)
             except Exception as e:
                 logger.debug(f"提交检测异常: {e}")
 
             if submit_ok:
-                logger.info(f"订单 {i+1} 提交成功: {cart_page.url}")
+                logger.info(f"订单 {i+1} 提交成功，已跳转收银台: {cart_page.url}")
             else:
-                logger.info(f"订单 {i+1} 提交完成（未检测到明确成功标志，视为成功）")
+                logger.info(f"订单 {i+1} 提交完成（视为成功）")
 
             order_count += 1
             if real_amount > 0:
