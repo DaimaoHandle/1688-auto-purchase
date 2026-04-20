@@ -8,6 +8,7 @@
 <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
 <script src="https://unpkg.com/element-plus"></script>
 <script src="https://unpkg.com/@element-plus/icons-vue"></script>
+<script src="https://unpkg.com/sortablejs@1.15.0/Sortable.min.js"></script>
 <style>
 html, body, #app { height: 100%; margin: 0; }
 .layout { height: 100%; display: flex; }
@@ -37,6 +38,8 @@ html, body, #app { height: 100%; margin: 0; }
 .log-box .log-line.INFO { color: #a5b4fc; }
 .config-form .el-form-item { margin-bottom: 16px; }
 .upload-zone { border: 2px dashed #dcdfe6; border-radius: 6px; padding: 24px; text-align: center; cursor: pointer; transition: border-color 0.2s; }
+.sortable-ghost { opacity: 0.4; background: #ecf5ff !important; }
+.sortable-drag { box-shadow: 0 4px 12px rgba(0,0,0,0.15) !important; }
 .upload-zone:hover { border-color: #409eff; }
 .upload-zone.uploaded { border-color: #67c23a; }
 .upload-zone img { max-height: 120px; max-width: 100%; margin-top: 8px; border-radius: 4px; }
@@ -175,8 +178,8 @@ html, body, #app { height: 100%; margin: 0; }
                         <el-button type="primary" size="small" @click="showAddNode = true">添加节点</el-button>
                     </div>
                     <div v-if="nodeList.length === 0" style="text-align:center;padding:40px;color:#999">暂无节点，请先添加</div>
-                    <div v-if="nodeList.length > 0" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(380px,1fr));gap:14px">
-                        <div v-for="n in nodeList" :key="n.id" style="border:1px solid #ebeef5;border-radius:8px;padding:16px">
+                    <div v-if="nodeList.length > 0" ref="dashboardGridRef" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(380px,1fr));gap:14px">
+                        <div v-for="n in sortedNodeList" :key="n.id" :data-id="n.id" style="border:1px solid #ebeef5;border-radius:8px;padding:16px;cursor:grab">
                             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
                                 <div style="font-size:15px;font-weight:600;display:flex;align-items:center;gap:8px">
                                     <span :style="{width:'8px',height:'8px',borderRadius:'50%',background:n.online?'#67c23a':'#f56c6c',display:'inline-block'}"></span>
@@ -221,8 +224,8 @@ html, body, #app { height: 100%; margin: 0; }
                     <el-button type="primary" size="small" @click="showAddNode = true">添加节点</el-button>
                 </div>
                 <div v-if="nodeList.length === 0" style="text-align:center;padding:40px;color:#999">暂无节点</div>
-                <div v-if="nodeList.length > 0" style="display:flex;gap:12px;overflow-x:auto;padding-bottom:8px">
-                    <div v-for="n in nodeList" :key="n.id"
+                <div v-if="nodeList.length > 0" ref="nodesGridRef" style="display:flex;gap:12px;overflow-x:auto;padding-bottom:8px">
+                    <div v-for="n in sortedNodeList" :key="n.id" :data-id="n.id"
                          :style="{minWidth:'280px',background:selectedLogNode===n.id?'#ecf5ff':'#fff',border:selectedLogNode===n.id?'2px solid #409eff':'2px solid transparent',borderRadius:'10px',padding:'14px',boxShadow:'0 1px 3px rgba(0,0,0,0.08)',cursor:'pointer',transition:'all 0.2s'}"
                          @click="selectLogNode(n.id)">
                         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
@@ -1073,6 +1076,63 @@ const app = createApp({
             }
         }, true);
 
+        // 节点排序（拖拽）
+        const nodeOrder = ref([]);  // 存储节点ID顺序
+        const dashboardGridRef = ref(null);
+        const nodesGridRef = ref(null);
+        let dashboardSortable = null;
+        let nodesSortable = null;
+
+        const sortedNodeList = computed(() => {
+            const list = nodeList.value;
+            if (nodeOrder.value.length === 0) return list;
+            const orderMap = {};
+            nodeOrder.value.forEach((id, i) => orderMap[id] = i);
+            return [...list].sort((a, b) => {
+                const oa = orderMap[a.id] !== undefined ? orderMap[a.id] : 9999;
+                const ob = orderMap[b.id] !== undefined ? orderMap[b.id] : 9999;
+                return oa - ob;
+            });
+        });
+
+        function saveNodeOrder(order) {
+            nodeOrder.value = order;
+            try { localStorage.setItem('nodeOrder', JSON.stringify(order)); } catch(e) {}
+        }
+
+        function loadNodeOrder() {
+            try {
+                const saved = localStorage.getItem('nodeOrder');
+                if (saved) nodeOrder.value = JSON.parse(saved);
+            } catch(e) {}
+        }
+
+        function initSortable(el, name) {
+            if (!el || typeof Sortable === 'undefined') return null;
+            return new Sortable(el, {
+                animation: 200,
+                ghostClass: 'sortable-ghost',
+                dragClass: 'sortable-drag',
+                onEnd: function(evt) {
+                    const children = evt.from.children;
+                    const order = [];
+                    for (let i = 0; i < children.length; i++) {
+                        const id = children[i].getAttribute('data-id');
+                        if (id) order.push(id);
+                    }
+                    saveNodeOrder(order);
+                }
+            });
+        }
+
+        // 监听 DOM 挂载后初始化拖拽
+        watch(dashboardGridRef, (el) => {
+            if (el && !dashboardSortable) dashboardSortable = initSortable(el);
+        });
+        watch(nodesGridRef, (el) => {
+            if (el && !nodesSortable) nodesSortable = initSortable(el);
+        });
+
         // 日志面板
         const selectedLogNode = ref('');
         const logViewMode = ref('event');
@@ -1137,6 +1197,7 @@ const app = createApp({
         }
 
         onMounted(async () => {
+            loadNodeOrder();
             await checkAuth();
             if (currentUser.value) { loadNodes(); loadTodayStats(); connectWS(); }
         });
@@ -1148,7 +1209,8 @@ const app = createApp({
             userList, showAddUser, addUserForm, doAddUser,
             showEditUser, editUserForm, openEditUser, doEditUser,
             toggleUserStatus, deleteUser,
-            currentPage, pageTitle, nodes, nodeList, onlineCount, activeCount,
+            currentPage, pageTitle, nodes, nodeList, sortedNodeList, onlineCount, activeCount,
+            dashboardGridRef, nodesGridRef,
             todayStats, formatTime,
             showLogs, nodeLogs, logRefs, toggleLog,
             statusLabel, statusType, progressPct,
