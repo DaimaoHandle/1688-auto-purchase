@@ -1806,15 +1806,18 @@ def _clear_remaining_cart(cart_page, context):
 
         if deleted:
             cart_page.wait_for_timeout(2000)
-            # 确认弹窗用鼠标点击
+            # 确认弹窗用鼠标点击（按钮可能是"删除"、"确定"、"确认"）
             confirm_coord = cart_page.evaluate("""() => {
+                var keywords = ['删除', '确定', '确认'];
                 var all = document.querySelectorAll('button');
-                for (var i = 0; i < all.length; i++) {
-                    var txt = String(all[i].innerText || '').trim();
-                    if (txt === '确定' || txt === '确认') {
-                        var r = all[i].getBoundingClientRect();
-                        if (r.width > 20 && r.height > 15) {
-                            return {x: r.x + r.width/2, y: r.y + r.height/2};
+                for (var k = 0; k < keywords.length; k++) {
+                    for (var i = 0; i < all.length; i++) {
+                        var txt = String(all[i].innerText || '').trim();
+                        if (txt === keywords[k]) {
+                            var r = all[i].getBoundingClientRect();
+                            if (r.width > 20 && r.height > 15) {
+                                return {x: r.x + r.width/2, y: r.y + r.height/2};
+                            }
                         }
                     }
                 }

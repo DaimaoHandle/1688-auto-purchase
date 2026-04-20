@@ -491,15 +491,18 @@ class PurchaseWorker:
                             cart_page.mouse.click(del_coord['x'], del_coord['y'])
                             cart_page.wait_for_timeout(3000)
 
-                            # 确认弹窗
+                            # 确认弹窗（按钮可能是"删除"、"确定"、"确认"）
                             confirm_coord = cart_page.evaluate("""() => {
-                                var all = document.querySelectorAll('button, a, div, span');
-                                for (var i = 0; i < all.length; i++) {
-                                    var txt = String(all[i].innerText || '').trim();
-                                    if (txt === '确定' || txt === '确认') {
-                                        var r = all[i].getBoundingClientRect();
-                                        if (r.width > 20 && r.height > 15) {
-                                            return {x: r.x + r.width/2, y: r.y + r.height/2};
+                                var keywords = ['删除', '确定', '确认'];
+                                var all = document.querySelectorAll('button');
+                                for (var k = 0; k < keywords.length; k++) {
+                                    for (var i = 0; i < all.length; i++) {
+                                        var txt = String(all[i].innerText || '').trim();
+                                        if (txt === keywords[k]) {
+                                            var r = all[i].getBoundingClientRect();
+                                            if (r.width > 20 && r.height > 15) {
+                                                return {x: r.x + r.width/2, y: r.y + r.height/2};
+                                            }
                                         }
                                     }
                                 }
