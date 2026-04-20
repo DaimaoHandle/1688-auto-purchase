@@ -842,7 +842,7 @@ const app = createApp({
             if (!nodeLogs[nid]) nodeLogs[nid] = [];
 
             if (msg.type === 'status_update') {
-                if (p.status === 'online') { nodes[nid].online = true; }
+                if (p.status === 'online') { nodes[nid].online = true; nodes[nid].task_status = null; nodes[nid].task_id = null; }
                 else if (p.status === 'offline') { nodes[nid].online = false; nodes[nid].task_status = null; }
                 else if (p.status === 'updated') {
                     // 更新是瞬态通知，不存为任务状态

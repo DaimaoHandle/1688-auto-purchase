@@ -67,6 +67,8 @@ async def agent_ws_endpoint(websocket: WebSocket):
         except Exception:
             pass
         node_manager.set_online(node_id, websocket, node_name, remote_ip=remote_ip)
+        # 重连时清除旧任务状态（Agent 重启后不再有运行中的任务）
+        node_manager.clear_task(node_id)
 
         await websocket.send_text(make_message(MSG_REGISTER_ACK, {
             "ok": True, "node_name": node_name
