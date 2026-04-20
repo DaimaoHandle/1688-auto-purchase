@@ -394,18 +394,29 @@ html, body, #app { height: 100%; margin: 0; }
                 </div>
 
                 <!-- 按节点统计 -->
-                <el-card shadow="never" style="margin-bottom:20px" v-if="reportSummary.by_node && reportSummary.by_node.length > 1">
-                    <template #header><span style="font-size:14px;font-weight:600">节点统计</span></template>
-                    <el-table :data="reportSummary.by_node" size="small" border>
-                        <el-table-column prop="node_name" label="节点" width="180" />
-                        <el-table-column prop="tasks" label="任务数" width="80" />
-                        <el-table-column prop="items" label="加购商品" width="90" />
-                        <el-table-column prop="orders" label="订单数" width="80" />
-                        <el-table-column label="采购金额" width="120" align="right">
-                            <template #default="{row}">¥{{ (row.amount || 0).toFixed(2) }}</template>
-                        </el-table-column>
-                    </el-table>
-                </el-card>
+                <div v-if="reportSummary.by_node && reportSummary.by_node.length > 1" style="background:#fff;border-radius:8px;padding:20px;margin-bottom:20px;box-shadow:0 1px 3px rgba(0,0,0,0.08)">
+                    <div style="font-size:14px;font-weight:600;margin-bottom:12px">节点统计</div>
+                    <table class="report-table" style="width:100%;border-collapse:collapse;font-size:13px">
+                        <thead>
+                            <tr style="background:#fafafa;border-bottom:2px solid #ebeef5">
+                                <th style="padding:10px 12px;text-align:left;white-space:nowrap">节点</th>
+                                <th style="padding:10px 12px;text-align:center;white-space:nowrap">任务数</th>
+                                <th style="padding:10px 12px;text-align:center;white-space:nowrap">加购商品</th>
+                                <th style="padding:10px 12px;text-align:center;white-space:nowrap">订单数</th>
+                                <th style="padding:10px 12px;text-align:right;white-space:nowrap">采购金额</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="row in reportSummary.by_node" :key="row.node_id" style="border-bottom:1px solid #ebeef5">
+                                <td style="padding:8px 12px">{{ row.node_name }}</td>
+                                <td style="padding:8px 12px;text-align:center">{{ row.tasks }}</td>
+                                <td style="padding:8px 12px;text-align:center">{{ row.items }}</td>
+                                <td style="padding:8px 12px;text-align:center">{{ row.orders }}</td>
+                                <td style="padding:8px 12px;text-align:right">¥{{ (row.amount || 0).toFixed(2) }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
 
                 <!-- 报告列表 -->
                 <el-card shadow="never">
