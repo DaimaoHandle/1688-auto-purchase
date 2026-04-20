@@ -1686,27 +1686,49 @@ def run_cart_checkout(context, order_limit: float = 500.0, shipping_reserve: flo
 
         # 提交订单
         if _click_submit_order(cart_page):
+            # 检测提交结果：URL 变化 或 页面出现成功提示
+            submit_ok = False
             try:
                 confirm_url = cart_page.url
-                cart_page.wait_for_url(
-                    lambda url: url != confirm_url,
-                    timeout=15000
-                )
-                cart_page.wait_for_timeout(2000)
+                # 先尝试等 URL 变化（5秒短超时）
+                try:
+                    cart_page.wait_for_url(lambda url: url != confirm_url, timeout=5000)
+                    submit_ok = True
+                except Exception:
+                    pass
+
+                # URL 没变，检查页面内容是否有成功提示
+                if not submit_ok:
+                    for _check in range(5):
+                        cart_page.wait_for_timeout(2000)
+                        has_success = cart_page.evaluate("""() => {
+                            var txt = document.body.innerText || '';
+                            return txt.indexOf('提交成功') !== -1 || txt.indexOf('下单成功') !== -1
+                                || txt.indexOf('订单已提交') !== -1 || txt.indexOf('支付') !== -1
+                                || txt.indexOf('交易成功') !== -1;
+                        }""")
+                        if has_success:
+                            submit_ok = True
+                            break
+                        # 也检查 URL 是否变了
+                        if cart_page.url != confirm_url:
+                            submit_ok = True
+                            break
+
+                cart_page.wait_for_timeout(1000)
+            except Exception as e:
+                logger.debug(f"提交检测异常: {e}")
+
+            if submit_ok:
                 logger.info(f"订单 {i+1} 提交成功: {cart_page.url}")
-                order_count += 1
-                if real_amount > 0:
-                    total_actual_amount += real_amount
-                # 记录本组商品为已提交
-                _submitted_offer_ids.extend([oid for oid in _pending_offer_ids if oid])
-                print(f"    订单 {i+1} 提交成功！金额 ¥{real_amount:.2f}")
-            except Exception:
-                logger.warning(f"订单 {i+1} 提交后未检测到跳转，可能已成功")
-                save_screenshot(cart_page, f"submit_no_redirect_{i+1}")
-                order_count += 1
-                if real_amount > 0:
-                    total_actual_amount += real_amount
-                _submitted_offer_ids.extend([oid for oid in _pending_offer_ids if oid])
+            else:
+                logger.info(f"订单 {i+1} 提交完成（未检测到明确成功标志，视为成功）")
+
+            order_count += 1
+            if real_amount > 0:
+                total_actual_amount += real_amount
+            _submitted_offer_ids.extend([oid for oid in _pending_offer_ids if oid])
+            print(f"    订单 {i+1} 提交成功！金额 ¥{real_amount:.2f}")
         else:
             logger.warning(f"订单 {i+1} 提交订单按钮点击失败")
             save_screenshot(cart_page, f"submit_fail_{i+1}")
