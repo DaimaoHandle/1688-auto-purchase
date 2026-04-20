@@ -49,11 +49,10 @@ def create_app() -> FastAPI:
             return await call_next(request)
         if path == "/api/auth/login":
             return await call_next(request)
-        # Agent 图片下载和采购历史查询放行
-        if path.startswith("/api/images/") and request.method == "GET":
-            return await call_next(request)
-        if path.startswith("/api/purchased/"):
-            return await call_next(request)
+        # Agent 相关 API 放行（图片、采购历史、日志）
+        for public_prefix in ["/api/images", "/api/purchased", "/api/logs"]:
+            if path == public_prefix or path.startswith(public_prefix + "/") or path.startswith(public_prefix + "?"):
+                return await call_next(request)
 
         # 检查登录
         user = get_current_user(request)
