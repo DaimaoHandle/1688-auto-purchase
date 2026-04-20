@@ -109,16 +109,3 @@ async def reject_checkout(task_id: str):
             }))
             return {"ok": True}
     raise HTTPException(404, "未找到对应节点或节点离线")
-
-
-@router.post("/nodes/{node_id}/update")
-async def update_node_code(node_id: str):
-    """向指定节点发送代码更新指令（git pull）。"""
-    node = node_manager.get(node_id)
-    if not node:
-        raise HTTPException(404, "节点不存在")
-    if not node.online or not node.ws:
-        raise HTTPException(400, "节点离线")
-
-    await node.ws.send_text(make_message(MSG_UPDATE_CODE, {}))
-    return {"ok": True}

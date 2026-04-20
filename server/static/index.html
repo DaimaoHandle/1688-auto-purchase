@@ -939,7 +939,7 @@ const app = createApp({
 
         async function updateNodeCode(nodeId) {
             try {
-                const res = await fetch('/api/tasks/nodes/' + nodeId + '/update', {method:'POST'});
+                const res = await fetch('/api/nodes/' + nodeId + '/update', {method:'POST'});
                 if (res.ok) ElementPlus.ElMessage.success('已发送更新指令，Agent 将执行 git pull');
                 else { const d = await res.json(); ElementPlus.ElMessage.error(d.detail || '发送失败'); }
             } catch(e) { ElementPlus.ElMessage.error(e.message); }
