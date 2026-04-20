@@ -440,51 +440,62 @@ class PurchaseWorker:
         if cart_url:
             set_cart_url(cart_url)
 
-            # 检查采购车是否有残留商品，如果有则清空
-            logger.info("检查采购车是否有残留商品...")
-            try:
-                cart_page = _open_cart_in_new_tab(context)
-                if cart_page:
-                    cart_page.wait_for_timeout(3000)
-                    amount = _read_bottom_bar_amount(cart_page)
+        # 检查采购车是否有残留商品，如果有则清空（无论是否获取到 URL 都尝试）
+        logger.info("检查采购车是否有残留商品...")
+        cart_page = None
+        try:
+            cart_page = _open_cart_in_new_tab(context)
+            if cart_page:
+                cart_page.wait_for_timeout(3000)
 
+                # 先用真实鼠标点击全选
+                coord = _mouse_click_select_all(cart_page)
+                if coord:
+                    # 确保全选被勾上
+                    if not coord.get('checked'):
+                        cart_page.mouse.click(coord['x'], coord['y'])
+                        cart_page.wait_for_timeout(2000)
+
+                    # 读取金额判断是否有商品
+                    amount = _read_bottom_bar_amount(cart_page)
                     if amount > 0:
                         logger.info(f"采购车有残留商品（¥{amount:.2f}），正在清空...")
-                        # 全选
-                        coord = _mouse_click_select_all(cart_page)
-                        if coord:
-                            if not coord.get('checked'):
-                                cart_page.mouse.click(coord['x'], coord['y'])
-                                cart_page.wait_for_timeout(2000)
 
-                            # 点击删除
-                            deleted = cart_page.evaluate("""() => {
-                                var all = document.querySelectorAll('button, a, div, span');
-                                for (var i = 0; i < all.length; i++) {
-                                    var txt = String(all[i].innerText || '').trim();
-                                    if (txt === '删除') {
-                                        var r = all[i].getBoundingClientRect();
-                                        if (r.width > 20 && r.height > 15) {
-                                            all[i].click();
-                                            return true;
-                                        }
+                        # 用真实鼠标点击删除按钮
+                        del_coord = cart_page.evaluate("""() => {
+                            var all = document.querySelectorAll('button, a, div, span');
+                            for (var i = 0; i < all.length; i++) {
+                                var txt = String(all[i].innerText || '').trim();
+                                if (txt === '删除') {
+                                    var r = all[i].getBoundingClientRect();
+                                    if (r.width > 20 && r.height > 15) {
+                                        return {x: r.x + r.width/2, y: r.y + r.height/2};
                                     }
                                 }
-                                return false;
-                            }""")
-                            if deleted:
-                                cart_page.wait_for_timeout(2000)
-                                _confirm_popup(cart_page)
-                                cart_page.wait_for_timeout(2000)
-                                logger.info("已清空采购车残留商品")
-                            else:
-                                logger.warning("未找到删除按钮")
+                            }
+                            return null;
+                        }""")
+                        if del_coord:
+                            cart_page.mouse.click(del_coord['x'], del_coord['y'])
+                            cart_page.wait_for_timeout(2000)
+                            # 确认弹窗（可能弹出"确认删除"）
+                            _confirm_popup(cart_page)
+                            cart_page.wait_for_timeout(2000)
+                            logger.info("已清空采购车残留商品")
+                        else:
+                            logger.warning("未找到删除按钮")
                     else:
                         logger.info("采购车为空，无需清理")
-
+                else:
+                    logger.warning("未找到全选按钮")
+        except Exception as e:
+            logger.warning(f"清空采购车失败: {e}")
+        finally:
+            if cart_page:
+                try:
                     cart_page.close()
-            except Exception as e:
-                logger.warning(f"清空采购车失败: {e}")
+                except Exception:
+                    pass
 
     def _do_searching(self):
         """以图搜图。"""
