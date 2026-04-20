@@ -472,16 +472,16 @@ class PurchaseWorker:
                             break
                         cart_page.wait_for_timeout(2000)
 
-                    # 找删除按钮并用鼠标点击
+                    # 找删除按钮并用鼠标点击（按钮文字可能是"删除"或"删除 N"）
                     for attempt in range(3):
                         del_coord = cart_page.evaluate("""() => {
-                            var all = document.querySelectorAll('button, a, div, span');
+                            var all = document.querySelectorAll('button');
                             for (var i = 0; i < all.length; i++) {
                                 var txt = String(all[i].innerText || '').trim();
-                                if (txt === '删除') {
+                                if (txt.indexOf('删除') !== -1 && txt.length < 10) {
                                     var r = all[i].getBoundingClientRect();
                                     if (r.width > 15 && r.height > 10) {
-                                        return {x: r.x + r.width/2, y: r.y + r.height/2};
+                                        return {x: r.x + r.width/2, y: r.y + r.height/2, txt: txt};
                                     }
                                 }
                             }

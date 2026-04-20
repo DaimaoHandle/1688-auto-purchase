@@ -1767,37 +1767,61 @@ def _clear_remaining_cart(cart_page, context):
             logger.info("采购车已为空，无需清空")
             return
 
-        # 点击删除按钮
-        deleted = cart_page.evaluate("""() => {
-            var all = document.querySelectorAll('button, a, div, span');
+        # 点击删除按钮（文字可能是"删除"或"删除 N"）
+        del_coord = cart_page.evaluate("""() => {
+            var all = document.querySelectorAll('button');
             for (var i = 0; i < all.length; i++) {
                 var txt = String(all[i].innerText || '').trim();
-                if (txt === '删除' && all[i].closest('[class*="bottom-bar"], [class*="sticky"], [class*="batch"]')) {
+                if (txt.indexOf('删除') !== -1 && txt.length < 10) {
                     var r = all[i].getBoundingClientRect();
-                    if (r.width > 10 && r.height > 10) {
-                        all[i].click();
-                        return true;
+                    if (r.width > 15 && r.height > 10) {
+                        return {x: r.x + r.width/2, y: r.y + r.height/2};
                     }
                 }
             }
-            // 兜底：找任何文字为"删除"的可见按钮
-            for (var j = 0; j < all.length; j++) {
-                var txt2 = String(all[j].innerText || '').trim();
-                if (txt2 === '删除') {
-                    var r2 = all[j].getBoundingClientRect();
-                    if (r2.width > 20 && r2.height > 15) {
-                        all[j].click();
-                        return true;
-                    }
-                }
-            }
-            return false;
+            return null;
         }""")
+        if del_coord:
+            cart_page.mouse.click(del_coord['x'], del_coord['y'])
+            deleted = True
+        else:
+            # 兜底：找任何含"删除"的可见按钮
+            deleted = False
+            del_coord2 = cart_page.evaluate("""() => {
+                var all = document.querySelectorAll('button, a, div, span');
+                for (var j = 0; j < all.length; j++) {
+                    var txt2 = String(all[j].innerText || '').trim();
+                    if (txt2.indexOf('删除') !== -1 && txt2.length < 10) {
+                        var r2 = all[j].getBoundingClientRect();
+                        if (r2.width > 15 && r2.height > 10) {
+                            return {x: r2.x + r2.width/2, y: r2.y + r2.height/2};
+                        }
+                    }
+                }
+                return null;
+            }""")
+            if del_coord2:
+                cart_page.mouse.click(del_coord2['x'], del_coord2['y'])
+                deleted = True
 
         if deleted:
             cart_page.wait_for_timeout(2000)
-            # 可能弹出确认框
-            _confirm_popup(cart_page)
+            # 确认弹窗用鼠标点击
+            confirm_coord = cart_page.evaluate("""() => {
+                var all = document.querySelectorAll('button');
+                for (var i = 0; i < all.length; i++) {
+                    var txt = String(all[i].innerText || '').trim();
+                    if (txt === '确定' || txt === '确认') {
+                        var r = all[i].getBoundingClientRect();
+                        if (r.width > 20 && r.height > 15) {
+                            return {x: r.x + r.width/2, y: r.y + r.height/2};
+                        }
+                    }
+                }
+                return null;
+            }""")
+            if confirm_coord:
+                cart_page.mouse.click(confirm_coord['x'], confirm_coord['y'])
             cart_page.wait_for_timeout(2000)
             logger.info("已删除采购车剩余商品")
         else:
