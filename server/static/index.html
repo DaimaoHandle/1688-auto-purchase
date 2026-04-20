@@ -838,6 +838,10 @@ const app = createApp({
             if (msg.type === 'status_update') {
                 if (p.status === 'online') { nodes[nid].online = true; }
                 else if (p.status === 'offline') { nodes[nid].online = false; nodes[nid].task_status = null; }
+                else if (p.status === 'updated') {
+                    ElementPlus.ElNotification({title: (nodes[nid].name||nid) + ' 代码更新', message: p.message || '更新完成', type: 'success', duration: 5000});
+                    nodeLogs[nid].push({level:'INFO', event_type:'event', phase:'更新', message: '代码更新: ' + (p.message||'完成'), timestamp: new Date().toISOString()});
+                }
                 else { nodes[nid].task_status = p.status; if (p.task_id) nodes[nid].task_id = p.task_id; }
             } else if (msg.type === 'progress_update') {
                 nodes[nid].task_progress = p; nodes[nid].task_status = 'filling_cart';
