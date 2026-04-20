@@ -239,6 +239,7 @@ html, body, #app { height: 100%; margin: 0; }
                         <div style="display:flex;gap:4px;flex-wrap:wrap">
                             <el-button size="small" @click.stop="editNodeInfo(n)">详情</el-button>
                             <el-button size="small" @click.stop="openConfig(n)">配置</el-button>
+                            <el-button v-if="n.online" size="small" @click.stop="updateNodeCode(n.id)">更新</el-button>
                             <el-button v-if="n.online && (!n.task_status || ['idle','completed','failed','cancelled'].includes(n.task_status))" type="success" size="small" @click.stop="startTask(n.id)">启动</el-button>
                             <el-button v-if="n.online && n.task_status==='awaiting_approval'" type="warning" size="small" @click.stop="approveCheckout(n.task_id)">确认结算</el-button>
                             <el-button v-if="n.online && n.task_status && !['idle','completed','failed','cancelled','awaiting_approval'].includes(n.task_status)" type="danger" size="small" @click.stop="stopTask(n.id)">停止</el-button>
