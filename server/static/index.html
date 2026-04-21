@@ -702,9 +702,13 @@ html, body, #app { height: 100%; margin: 0; }
             </div>
             <div>
                 <div style="font-size:12px;color:#909399;margin-bottom:4px">搜索图片</div>
-                <el-select v-model="planNodeConfigs[n.id].image_id" placeholder="选择图片" size="small" style="width:100%">
-                    <el-option v-for="img in imageList" :key="img.id" :label="img.filename" :value="img.id" />
-                </el-select>
+                <div style="display:flex;gap:4px">
+                    <el-select v-model="planNodeConfigs[n.id].image_id" placeholder="选择图片" size="small" style="flex:1">
+                        <el-option v-for="img in imageList" :key="img.id" :label="img.filename" :value="img.id" />
+                    </el-select>
+                    <el-button size="small" @click="$refs['planUpload_'+n.id][0].click()">上传</el-button>
+                    <input :ref="'planUpload_'+n.id" type="file" accept="image/*" style="display:none" @change="planUploadImage($event, n.id)" />
+                </div>
             </div>
             <div>
                 <div style="font-size:12px;color:#909399;margin-bottom:4px">目标金额</div>
@@ -1319,6 +1323,27 @@ const app = createApp({
             } catch(e) { ElementPlus.ElMessage.error(e.message); }
         }
 
+        async function planUploadImage(event, nodeId) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const fd = new FormData();
+            fd.append('file', file, file.name);
+            try {
+                const res = await fetch('/api/images', {method:'POST', body:fd});
+                const data = await res.json();
+                if (res.ok) {
+                    planNodeConfigs[nodeId].image_id = data.id;
+                    // 刷新图片列表
+                    const res2 = await fetch('/api/images');
+                    if (res2.ok) imageList.value = await res2.json();
+                    ElementPlus.ElMessage.success('图片已上传');
+                } else {
+                    ElementPlus.ElMessage.error('上传失败');
+                }
+            } catch(e) { ElementPlus.ElMessage.error(e.message); }
+            event.target.value = '';
+        }
+
         async function executePlan(planId) {
             try {
                 const res = await fetch('/api/task-plans/' + planId + '/execute', {method:'POST'});
@@ -1434,7 +1459,7 @@ const app = createApp({
             selectedLogNode, selectLogNode, logViewMode, logLevelFilter, logSearchText,
             logAutoScroll, logPanelRef, filteredLogs, logColor, onLogScroll,
             taskPlans, showCreatePlan, newPlan, planNodeEnabled, planNodeConfigs,
-            submitPlan, executePlan, deletePlan, togglePlanNode,
+            submitPlan, executePlan, deletePlan, togglePlanNode, planUploadImage,
             updateAllNodes, updateNodeCode, deleteNode, startTask, stopTask, approveCheckout, rejectCheckout,
             showConfig, configTitle, configForm, imageList, shopList,
             openConfig, saveConfig, onFileChange, onDrop, onSelectExisting,
