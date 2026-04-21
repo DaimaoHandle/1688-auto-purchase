@@ -1,0 +1,15 @@
+[Unit]
+Description=1688 Purchase Management Server
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/1688-auto-purchase
+ExecStart=/home/ubuntu/1688-auto-purchase/venv/bin/python3 server/server_main.py
+Restart=always
+RestartSec=5
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target

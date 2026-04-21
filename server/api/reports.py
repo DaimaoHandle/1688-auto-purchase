@@ -112,6 +112,33 @@ async def report_summary():
         await db.close()
 
 
+@router.get("/daily")
+async def daily_stats(days: int = 7):
+    """最近 N 天每日采购统计。"""
+    db = await get_db()
+    try:
+        cursor = await db.execute(
+            """SELECT date(created_at) as day,
+                      COUNT(*) as tasks,
+                      SUM(items_added) as items,
+                      SUM(orders_created) as orders,
+                      SUM(actual_amount) as amount
+               FROM reports
+               WHERE created_at >= date('now', ?)
+               GROUP BY date(created_at)
+               ORDER BY day""",
+            (f"-{days} days",)
+        )
+        rows = await cursor.fetchall()
+        return [
+            {"day": r["day"], "tasks": r["tasks"], "items": r["items"] or 0,
+             "orders": r["orders"] or 0, "amount": r["amount"] or 0}
+            for r in rows
+        ]
+    finally:
+        await db.close()
+
+
 @router.get("/export")
 async def export_reports(node_id: Optional[str] = None):
     """导出报告为 CSV（Excel 兼容）。"""

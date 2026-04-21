@@ -31,11 +31,31 @@ PUBLIC_PATHS = {"/api/auth/login", "/ws/agent", "/ws/dashboard", "/static", "/"}
 PUBLIC_PREFIXES = ("/api/auth/login", "/ws/", "/static/", "/api/images/")
 
 
+async def _heartbeat_checker():
+    """后台任务：检查节点心跳超时（45秒无心跳标记离线）。"""
+    import asyncio
+    from datetime import datetime, timedelta
+    from shared.protocol import make_message, MSG_STATUS_UPDATE
+    while True:
+        await asyncio.sleep(15)
+        now = datetime.now()
+        for node in node_manager.get_all():
+            if node.online and node.last_heartbeat:
+                if now - node.last_heartbeat > timedelta(seconds=45):
+                    node_manager.set_offline(node.node_id)
+                    await node_manager.broadcast_to_dashboards(make_message(MSG_STATUS_UPDATE, {
+                        "node_id": node.node_id, "status": "offline"
+                    }))
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
     logger.info("数据库已初始化（默认管理员 admin/admin）")
+    import asyncio
+    task = asyncio.create_task(_heartbeat_checker())
     yield
+    task.cancel()
 
 
 def create_app() -> FastAPI:

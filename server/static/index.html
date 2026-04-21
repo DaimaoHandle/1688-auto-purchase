@@ -9,6 +9,7 @@
 <script src="https://unpkg.com/element-plus"></script>
 <script src="https://unpkg.com/@element-plus/icons-vue"></script>
 <script src="https://unpkg.com/sortablejs@1.15.0/Sortable.min.js"></script>
+<script src="https://unpkg.com/echarts@5/dist/echarts.min.js"></script>
 <style>
 html, body, #app { height: 100%; margin: 0; }
 .layout { height: 100%; display: flex; }
@@ -446,6 +447,12 @@ html, body, #app { height: 100%; margin: 0; }
                             <div style="font-size:13px;color:#999;margin-top:4px">总采购金额</div>
                         </div>
                     </el-card>
+                </div>
+
+                <!-- 趋势图表 -->
+                <div style="background:#fff;border-radius:8px;padding:20px;margin-bottom:20px;box-shadow:0 1px 3px rgba(0,0,0,0.08)">
+                    <div style="font-size:14px;font-weight:600;margin-bottom:12px">采购趋势（近7天）</div>
+                    <div ref="trendChartRef" style="height:250px"></div>
                 </div>
 
                 <!-- 按节点统计 -->
@@ -1231,6 +1238,30 @@ const app = createApp({
             window.open('/api/reports/export' + params, '_blank');
         }
 
+        const trendChartRef = ref(null);
+
+        async function loadTrendChart() {
+            try {
+                const res = await fetch('/api/reports/daily?days=7');
+                if (!res.ok) return;
+                const data = await res.json();
+                await nextTick();
+                const el = trendChartRef.value;
+                if (!el || typeof echarts === 'undefined') return;
+                const chart = echarts.init(el);
+                chart.setOption({
+                    tooltip: {trigger: 'axis'},
+                    legend: {data: ['采购金额', '订单数']},
+                    xAxis: {type: 'category', data: data.map(d => d.day)},
+                    yAxis: [{type: 'value', name: '金额(元)'}, {type: 'value', name: '订单数'}],
+                    series: [
+                        {name: '采购金额', type: 'bar', data: data.map(d => d.amount), itemStyle: {color: '#409eff'}},
+                        {name: '订单数', type: 'line', yAxisIndex: 1, data: data.map(d => d.orders), itemStyle: {color: '#67c23a'}},
+                    ]
+                });
+            } catch(e) {}
+        }
+
         async function loadReports() {
             reportLoading.value = true;
             try {
@@ -1471,7 +1502,7 @@ const app = createApp({
         function onMenuSelect(index) {
             currentPage.value = index;
             if (index === 'tasks') loadTaskPlans();
-            if (index === 'data') loadReports();
+            if (index === 'data') { loadReports(); loadTrendChart(); }
             if (index === 'users') loadUsers();
             if (index === 'audit') loadAuditLogs();
         }
@@ -1505,7 +1536,7 @@ const app = createApp({
             updateAllNodes, updateNodeCode, deleteNode, startTask, stopTask, approveCheckout, rejectCheckout,
             showConfig, configTitle, configForm, imageList, shopList,
             openConfig, saveConfig, onFileChange, onDrop, onSelectExisting,
-            reportSummary, reportList, reportFilter, reportLoading, loadReports, exportReports,
+            trendChartRef, reportSummary, reportList, reportFilter, reportLoading, loadReports, exportReports,
             auditLogs,
             onMenuSelect,
         };

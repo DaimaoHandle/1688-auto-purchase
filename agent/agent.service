@@ -1,0 +1,15 @@
+[Unit]
+Description=1688 Purchase Agent
+After=network.target
+
+[Service]
+Type=simple
+User=admin
+WorkingDirectory=/home/admin/1688/1688-auto-purchase
+ExecStart=/usr/bin/python3 agent/agent_main.py
+Restart=always
+RestartSec=5
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target
