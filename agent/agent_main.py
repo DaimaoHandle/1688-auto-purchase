@@ -127,10 +127,16 @@ async def main():
                             "message": f"代码已更新: {result.stdout.strip()}，正在重启..."
                         }))
                         await asyncio.sleep(1)
-                        # 重启自身
+                        # 重启自身：优先用 systemctl，回退用 os.execv
                         logger.info("正在重启 Agent...")
                         await client.stop()
-                        os.execv(sys.executable, [sys.executable] + sys.argv)
+                        import subprocess as _sp
+                        # 检查是否由 systemd 管理
+                        _svc = _sp.run(["systemctl", "is-active", "1688-agent"], capture_output=True, text=True)
+                        if _svc.returncode == 0:
+                            _sp.run(["sudo", "systemctl", "restart", "1688-agent"])
+                        else:
+                            os.execv(sys.executable, [sys.executable] + sys.argv)
                     else:
                         logger.warning(f"git pull 失败: {result.stderr.strip()}")
                         from shared.protocol import make_message, MSG_STATUS_UPDATE
