@@ -292,7 +292,50 @@ html, body, #app { height: 100%; margin: 0; }
 
             <!-- 任务中心 -->
             <template v-if="currentPage === 'tasks'">
-                <el-empty description="任务中心开发中" />
+                <div style="margin-bottom:16px;display:flex;justify-content:space-between;align-items:center">
+                    <span style="font-size:14px;font-weight:600">任务计划</span>
+                    <el-button type="primary" size="small" @click="showCreatePlan = true">新建计划</el-button>
+                </div>
+
+                <!-- 计划列表 -->
+                <div v-if="taskPlans.length === 0" style="text-align:center;padding:60px;color:#999">暂无任务计划</div>
+                <div v-for="plan in taskPlans" :key="plan.id" style="background:#fff;border-radius:10px;padding:20px;margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,0.08)">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+                        <div>
+                            <span style="font-size:15px;font-weight:600">{{ plan.name }}</span>
+                            <el-tag :type="plan.status==='completed'?'success':plan.status==='running'?'primary':'info'" size="small" style="margin-left:8px">{{ {pending:'待执行',running:'执行中',completed:'已完成',skipped:'已跳过'}[plan.status]||plan.status }}</el-tag>
+                        </div>
+                        <div style="display:flex;gap:6px;align-items:center">
+                            <span style="font-size:12px;color:#999">{{ plan.created_by }} | {{ plan.created_at }}</span>
+                            <el-button v-if="plan.status==='pending'" type="success" size="small" @click="executePlan(plan.id)">立即执行</el-button>
+                            <el-button size="small" type="danger" @click="deletePlan(plan.id)">删除</el-button>
+                        </div>
+                    </div>
+                    <div style="overflow-x:auto">
+                    <table class="report-table" style="width:100%;border-collapse:collapse;font-size:13px">
+                        <thead>
+                            <tr style="background:#fafafa;border-bottom:2px solid #ebeef5">
+                                <th style="padding:8px 12px;text-align:left;white-space:nowrap">节点</th>
+                                <th style="padding:8px 12px;text-align:left;white-space:nowrap">店铺</th>
+                                <th style="padding:8px 12px;text-align:center;white-space:nowrap">模式</th>
+                                <th style="padding:8px 12px;text-align:right;white-space:nowrap">目标金额</th>
+                                <th style="padding:8px 12px;text-align:center;white-space:nowrap">状态</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="item in plan.items" :key="item.node_id" style="border-bottom:1px solid #ebeef5">
+                                <td style="padding:6px 12px">{{ item.node_name }}</td>
+                                <td style="padding:6px 12px">{{ item.shop_name || '-' }}</td>
+                                <td style="padding:6px 12px;text-align:center">{{ item.purchase_mode==='new_product'?'新品':'正常' }}</td>
+                                <td style="padding:6px 12px;text-align:right">¥{{ item.target_amount }}</td>
+                                <td style="padding:6px 12px;text-align:center">
+                                    <el-tag :type="item.status==='running'?'primary':item.status==='completed'?'success':item.status==='skipped'?'warning':'info'" size="small">{{ {pending:'待执行',running:'执行中',completed:'已完成',skipped:'已跳过',failed:'失败'}[item.status]||item.status }}</el-tag>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    </div>
+                </div>
             </template>
 
             <!-- 用户管理 -->
@@ -627,6 +670,67 @@ html, body, #app { height: 100%; margin: 0; }
     <template #footer>
         <el-button @click="showEditUser = false">取消</el-button>
         <el-button type="primary" @click="doEditUser">保存</el-button>
+    </template>
+</el-dialog>
+
+<!-- 新建任务计划弹窗 -->
+<el-dialog v-model="showCreatePlan" title="新建采购计划" width="700px">
+    <el-form label-width="80px">
+        <el-form-item label="计划名称">
+            <el-input v-model="newPlan.name" placeholder="如：4月21日日常采购" />
+        </el-form-item>
+        <el-form-item label="定时执行">
+            <el-input v-model="newPlan.scheduled_at" type="datetime-local" placeholder="留空则立即执行" />
+            <div style="font-size:11px;color:#909399;margin-top:4px">留空则创建后立即执行</div>
+        </el-form-item>
+    </el-form>
+
+    <div style="font-size:13px;font-weight:600;margin:16px 0 8px">节点配置（勾选要参与的节点，每个节点可配置不同的店铺和图片）</div>
+
+    <div v-for="n in nodeList" :key="n.id" style="border:1px solid #ebeef5;border-radius:8px;padding:12px;margin-bottom:8px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+            <input type="checkbox" :checked="planNodeEnabled[n.id]" @change="togglePlanNode(n.id)" />
+            <span style="font-weight:600">{{ n.name || n.id }}</span>
+            <el-tag :type="n.online?'success':'info'" size="small">{{ n.online?'在线':'离线' }}</el-tag>
+        </div>
+        <div v-if="planNodeEnabled[n.id]" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;padding-left:24px">
+            <div>
+                <div style="font-size:12px;color:#909399;margin-bottom:4px">店铺</div>
+                <el-select v-model="planNodeConfigs[n.id].shop_name" placeholder="选择店铺" filterable allow-create size="small" style="width:100%">
+                    <el-option v-for="s in shopList" :key="s" :label="s" :value="s" />
+                </el-select>
+            </div>
+            <div>
+                <div style="font-size:12px;color:#909399;margin-bottom:4px">搜索图片</div>
+                <el-select v-model="planNodeConfigs[n.id].image_id" placeholder="选择图片" size="small" style="width:100%">
+                    <el-option v-for="img in imageList" :key="img.id" :label="img.filename" :value="img.id" />
+                </el-select>
+            </div>
+            <div>
+                <div style="font-size:12px;color:#909399;margin-bottom:4px">目标金额</div>
+                <el-input-number v-model="planNodeConfigs[n.id].target_amount" :min="100" :step="500" size="small" style="width:100%" />
+            </div>
+            <div>
+                <div style="font-size:12px;color:#909399;margin-bottom:4px">采购模式</div>
+                <el-radio-group v-model="planNodeConfigs[n.id].purchase_mode" size="small">
+                    <el-radio value="normal">正常</el-radio>
+                    <el-radio value="new_product">新品</el-radio>
+                </el-radio-group>
+            </div>
+            <div>
+                <div style="font-size:12px;color:#909399;margin-bottom:4px">每单限额</div>
+                <el-input-number v-model="planNodeConfigs[n.id].order_limit" :min="100" :step="100" size="small" style="width:100%" />
+            </div>
+            <div>
+                <div style="font-size:12px;color:#909399;margin-bottom:4px">运费预留</div>
+                <el-input-number v-model="planNodeConfigs[n.id].shipping_reserve" :min="0" :step="5" size="small" style="width:100%" />
+            </div>
+        </div>
+    </div>
+
+    <template #footer>
+        <el-button @click="showCreatePlan = false">取消</el-button>
+        <el-button type="primary" @click="submitPlan">{{ newPlan.scheduled_at ? '创建定时计划' : '创建并立即执行' }}</el-button>
     </template>
 </el-dialog>
 
@@ -1166,6 +1270,82 @@ const app = createApp({
             if (el && !nodesSortable) nodesSortable = initSortable(el);
         });
 
+        // 任务计划
+        const taskPlans = ref([]);
+        const showCreatePlan = ref(false);
+        const newPlan = reactive({name: '', scheduled_at: ''});
+        const planNodeEnabled = reactive({});
+        const planNodeConfigs = reactive({});
+
+        async function loadTaskPlans() {
+            try { const res = await fetch('/api/task-plans'); if (res.ok) taskPlans.value = await res.json(); } catch(e) {}
+        }
+
+        function togglePlanNode(nodeId) {
+            planNodeEnabled[nodeId] = !planNodeEnabled[nodeId];
+            if (planNodeEnabled[nodeId] && !planNodeConfigs[nodeId]) {
+                planNodeConfigs[nodeId] = {shop_name:'', image_id:'', target_amount:2000, purchase_mode:'normal', order_limit:500, shipping_reserve:15, max_items:200};
+            }
+        }
+
+        async function submitPlan() {
+            const items = [];
+            for (const nid in planNodeEnabled) {
+                if (planNodeEnabled[nid] && planNodeConfigs[nid]) {
+                    items.push({node_id: nid, ...planNodeConfigs[nid]});
+                }
+            }
+            if (items.length === 0) { ElementPlus.ElMessage.warning('请至少选择一个节点'); return; }
+
+            // 加载图片列表（弹窗可能需要）
+            try { const res2 = await fetch('/api/images'); if (res2.ok) imageList.value = await res2.json(); } catch(e) {}
+
+            try {
+                const res = await fetch('/api/task-plans', {
+                    method:'POST', headers:{'Content-Type':'application/json'},
+                    body: JSON.stringify({name: newPlan.name, scheduled_at: newPlan.scheduled_at || null, items})
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    ElementPlus.ElMessage.success('计划已创建: ' + data.name);
+                    showCreatePlan.value = false;
+                    newPlan.name = ''; newPlan.scheduled_at = '';
+                    Object.keys(planNodeEnabled).forEach(k => planNodeEnabled[k] = false);
+                    loadTaskPlans();
+                } else {
+                    const d = await res.json();
+                    ElementPlus.ElMessage.error(d.detail || '创建失败');
+                }
+            } catch(e) { ElementPlus.ElMessage.error(e.message); }
+        }
+
+        async function executePlan(planId) {
+            try {
+                const res = await fetch('/api/task-plans/' + planId + '/execute', {method:'POST'});
+                if (res.ok) { ElementPlus.ElMessage.success('计划已开始执行'); loadTaskPlans(); }
+                else { const d = await res.json(); ElementPlus.ElMessage.error(d.detail || '执行失败'); }
+            } catch(e) { ElementPlus.ElMessage.error(e.message); }
+        }
+
+        async function deletePlan(planId) {
+            try { await ElementPlus.ElMessageBox.confirm('确认删除此计划？'); } catch { return; }
+            await fetch('/api/task-plans/' + planId, {method:'DELETE'});
+            loadTaskPlans();
+        }
+
+        // 打开新建计划时加载图片列表
+        watch(showCreatePlan, async (v) => {
+            if (v) {
+                try { const res = await fetch('/api/images'); if (res.ok) imageList.value = await res.json(); } catch(e) {}
+                // 初始化每个节点的配置
+                for (const n of nodeList.value) {
+                    if (!planNodeConfigs[n.id]) {
+                        planNodeConfigs[n.id] = {shop_name:'', image_id:'', target_amount:2000, purchase_mode:'normal', order_limit:500, shipping_reserve:15, max_items:200};
+                    }
+                }
+            }
+        });
+
         // 日志面板
         const selectedLogNode = ref('');
         const logViewMode = ref('event');
@@ -1224,6 +1404,7 @@ const app = createApp({
 
         function onMenuSelect(index) {
             currentPage.value = index;
+            if (index === 'tasks') loadTaskPlans();
             if (index === 'data') loadReports();
             if (index === 'users') loadUsers();
             if (index === 'audit') loadAuditLogs();
@@ -1252,6 +1433,8 @@ const app = createApp({
             showEditNode, editNode, editNodeInfo, saveNodeInfo,
             selectedLogNode, selectLogNode, logViewMode, logLevelFilter, logSearchText,
             logAutoScroll, logPanelRef, filteredLogs, logColor, onLogScroll,
+            taskPlans, showCreatePlan, newPlan, planNodeEnabled, planNodeConfigs,
+            submitPlan, executePlan, deletePlan, togglePlanNode,
             updateAllNodes, updateNodeCode, deleteNode, startTask, stopTask, approveCheckout, rejectCheckout,
             showConfig, configTitle, configForm, imageList, shopList,
             openConfig, saveConfig, onFileChange, onDrop, onSelectExisting,

@@ -86,6 +86,30 @@ CREATE TABLE IF NOT EXISTS purchased_items (
     UNIQUE(shop_name, offer_id)
 );
 
+CREATE TABLE IF NOT EXISTS task_plans (
+    id          TEXT PRIMARY KEY,
+    name        TEXT NOT NULL DEFAULT '',
+    scheduled_at TEXT,
+    status      TEXT NOT NULL DEFAULT 'pending',
+    created_by  TEXT NOT NULL DEFAULT '',
+    created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS task_plan_items (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    plan_id     TEXT NOT NULL REFERENCES task_plans(id),
+    node_id     TEXT NOT NULL,
+    shop_name   TEXT NOT NULL DEFAULT '',
+    image_id    TEXT,
+    target_amount REAL NOT NULL DEFAULT 2000,
+    purchase_mode TEXT NOT NULL DEFAULT 'normal',
+    order_limit REAL NOT NULL DEFAULT 500,
+    shipping_reserve REAL NOT NULL DEFAULT 15,
+    max_items   INTEGER NOT NULL DEFAULT 200,
+    status      TEXT NOT NULL DEFAULT 'pending',
+    task_id     TEXT
+);
+
 CREATE TABLE IF NOT EXISTS audit_logs (
     id          TEXT PRIMARY KEY,
     user_id     TEXT NOT NULL DEFAULT '',

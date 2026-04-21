@@ -20,6 +20,7 @@ from server.api.users import router as users_router
 from server.api.audit import router as audit_router
 from server.api.purchased import router as purchased_router
 from server.api.logs import router as logs_router
+from server.api.task_plans import router as task_plans_router
 from server.services.node_manager import node_manager
 from shared.protocol import parse_message, make_message, MSG_STATUS_UPDATE
 
@@ -72,6 +73,7 @@ def create_app() -> FastAPI:
     app.include_router(audit_router)
     app.include_router(purchased_router)
     app.include_router(logs_router)
+    app.include_router(task_plans_router)
 
     # Agent WebSocket 端点
     @app.websocket("/ws/agent")
