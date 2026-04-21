@@ -56,7 +56,7 @@ def create_app() -> FastAPI:
                 return await call_next(request)
 
         # 检查登录
-        user = get_current_user(request)
+        user = await get_current_user(request)
         if not user:
             return JSONResponse({"detail": "未登录"}, status_code=401)
 

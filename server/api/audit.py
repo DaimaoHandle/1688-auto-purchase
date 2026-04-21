@@ -16,7 +16,7 @@ router = APIRouter(prefix="/api/audit", tags=["audit"])
 
 async def log_action(request: Request, action: str, node_id: str = "", detail: str = ""):
     """记录一条操作日志。"""
-    user = get_current_user(request) if request else None
+    user = (await get_current_user(request)) if request else None
     user_name = user["name"] if user else "系统"
     user_id = user["id"] if user else ""
 

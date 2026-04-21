@@ -12,8 +12,8 @@ from server.api.auth import hash_password, get_current_user
 router = APIRouter(prefix="/api/users", tags=["users"])
 
 
-def require_admin(request: Request):
-    user = get_current_user(request)
+async def require_admin(request: Request):
+    user = await get_current_user(request)
     if not user or user.get("role") != "admin":
         raise HTTPException(403, "需要管理员权限")
     return user
@@ -36,7 +36,7 @@ class UpdateUserRequest(BaseModel):
 
 @router.get("")
 async def list_users(request: Request):
-    require_admin(request)
+    await require_admin(request)
     db = await get_db()
     try:
         cursor = await db.execute(
@@ -54,7 +54,7 @@ async def list_users(request: Request):
 
 @router.post("")
 async def create_user(req: CreateUserRequest, request: Request):
-    require_admin(request)
+    await require_admin(request)
     if len(req.password) < 8:
         raise HTTPException(400, "密码至少8位")
     if not req.phone:
@@ -81,7 +81,7 @@ async def create_user(req: CreateUserRequest, request: Request):
 
 @router.patch("/{user_id}")
 async def update_user(user_id: str, req: UpdateUserRequest, request: Request):
-    require_admin(request)
+    await require_admin(request)
     db = await get_db()
     try:
         fields = []
@@ -119,7 +119,7 @@ async def update_user(user_id: str, req: UpdateUserRequest, request: Request):
 
 @router.delete("/{user_id}")
 async def delete_user(user_id: str, request: Request):
-    cur_user = require_admin(request)
+    cur_user = await require_admin(request)
     if cur_user["id"] == user_id:
         raise HTTPException(400, "不能删除自己")
     db = await get_db()

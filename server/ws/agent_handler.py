@@ -163,6 +163,28 @@ async def agent_ws_endpoint(websocket: WebSocket):
                          json.dumps(payload.get("errors", []), ensure_ascii=False),
                          json.dumps(payload, ensure_ascii=False))
                     )
+                    # 回写任务计划状态
+                    errors = payload.get("errors", [])
+                    plan_status = "failed" if errors else "completed"
+                    await db.execute(
+                        "UPDATE task_plan_items SET status = ? WHERE task_id = ?",
+                        (plan_status, task_id)
+                    )
+                    # 检查计划是否所有项都完成了
+                    cursor2 = await db.execute(
+                        """SELECT plan_id FROM task_plan_items WHERE task_id = ?""", (task_id,)
+                    )
+                    plan_row = await cursor2.fetchone()
+                    if plan_row:
+                        pid = plan_row["plan_id"]
+                        cursor3 = await db.execute(
+                            "SELECT COUNT(*) as cnt FROM task_plan_items WHERE plan_id = ? AND status IN ('pending','running')",
+                            (pid,)
+                        )
+                        remaining = await cursor3.fetchone()
+                        if remaining and remaining["cnt"] == 0:
+                            await db.execute("UPDATE task_plans SET status = 'completed' WHERE id = ?", (pid,))
+
                     await db.commit()
                     await db.close()
                 except Exception as e:

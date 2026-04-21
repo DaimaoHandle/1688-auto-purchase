@@ -86,6 +86,12 @@ CREATE TABLE IF NOT EXISTS purchased_items (
     UNIQUE(shop_name, offer_id)
 );
 
+CREATE TABLE IF NOT EXISTS sessions (
+    token       TEXT PRIMARY KEY,
+    user_id     TEXT NOT NULL REFERENCES users(id),
+    created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS task_plans (
     id          TEXT PRIMARY KEY,
     name        TEXT NOT NULL DEFAULT '',

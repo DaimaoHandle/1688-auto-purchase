@@ -38,6 +38,11 @@ html, body, #app { height: 100%; margin: 0; }
 .log-box .log-line.INFO { color: #a5b4fc; }
 .config-form .el-form-item { margin-bottom: 16px; }
 .upload-zone { border: 2px dashed #dcdfe6; border-radius: 6px; padding: 24px; text-align: center; cursor: pointer; transition: border-color 0.2s; }
+@media (max-width: 768px) {
+    .sidebar { width: 60px !important; }
+    .sidebar .logo h1, .sidebar .logo p, .sidebar .el-menu span { display: none; }
+    .content { padding: 12px !important; }
+}
 .sortable-ghost { opacity: 0.4; background: #ecf5ff !important; }
 .sortable-drag { box-shadow: 0 4px 12px rgba(0,0,0,0.15) !important; }
 .upload-zone:hover { border-color: #409eff; }
@@ -169,6 +174,13 @@ html, body, #app { height: 100%; margin: 0; }
                         <div style="font-size:22px;font-weight:700;color:#f56c6c">¥{{ (todayStats.today_amount || 0).toFixed(2) }}</div>
                         <div style="font-size:12px;color:#999;margin-top:4px">今日采购额</div>
                     </el-card>
+                </div>
+
+                <!-- 批量操作 -->
+                <div v-if="nodeList.length > 0" style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap">
+                    <el-button size="small" type="success" @click="batchStartAll" v-if="nodeList.some(n=>n.online&&(!n.task_status||['idle','completed','failed','cancelled'].includes(n.task_status)))">全部启动</el-button>
+                    <el-button size="small" type="danger" @click="batchStopAll" v-if="nodeList.some(n=>n.online&&n.task_status&&!['idle','completed','failed','cancelled','awaiting_approval'].includes(n.task_status))">全部停止</el-button>
+                    <el-button size="small" type="warning" @click="batchApproveAll" v-if="nodeList.some(n=>n.task_status==='awaiting_approval')">全部确认结算</el-button>
                 </div>
 
                 <!-- 节点状态概览 -->
@@ -969,7 +981,14 @@ const app = createApp({
                     nodeLogs[nid].push({level:'INFO', event_type:'event', phase:'更新', message: '代码更新: ' + (p.message||'完成'), timestamp: new Date().toISOString()});
                     // 不设置 task_status，保持原有状态
                 }
-                else { nodes[nid].task_status = p.status; if (p.task_id) nodes[nid].task_id = p.task_id; }
+                else {
+                    // 等待确认结算时弹通知+声音
+                    if (p.status === 'awaiting_approval' && nodes[nid].task_status !== 'awaiting_approval') {
+                        ElementPlus.ElNotification({title: (nodes[nid].name||nid), message: '加购完成，等待确认结算', type: 'warning', duration: 0});
+                        try { new Audio('data:audio/wav;base64,UklGRl9vT19teleUFZRSAAABAAEAIlYAAESsAAACABAAZGF0YTtvT19XSQ==').play(); } catch(e) {}
+                    }
+                    nodes[nid].task_status = p.status; if (p.task_id) nodes[nid].task_id = p.task_id;
+                }
             } else if (msg.type === 'progress_update') {
                 nodes[nid].task_progress = p; nodes[nid].task_status = 'filling_cart';
                 if (p.task_id) nodes[nid].task_id = p.task_id;
@@ -1066,6 +1085,28 @@ const app = createApp({
                     ElementPlus.ElMessage.error(d.detail || '保存失败');
                 }
             } catch(e) { ElementPlus.ElMessage.error(e.message); }
+        }
+
+        async function batchStartAll() {
+            const targets = nodeList.value.filter(n => n.online && (!n.task_status || ['idle','completed','failed','cancelled'].includes(n.task_status)));
+            if (!targets.length) return;
+            try { await ElementPlus.ElMessageBox.confirm('启动 ' + targets.length + ' 个空闲节点？'); } catch { return; }
+            for (const n of targets) { try { await fetch('/api/tasks/nodes/' + n.id + '/start', {method:'POST'}); } catch(e) {} }
+            ElementPlus.ElMessage.success('已启动 ' + targets.length + ' 个节点');
+        }
+        async function batchStopAll() {
+            const targets = nodeList.value.filter(n => n.online && n.task_status && !['idle','completed','failed','cancelled','awaiting_approval'].includes(n.task_status));
+            if (!targets.length) return;
+            try { await ElementPlus.ElMessageBox.confirm('停止 ' + targets.length + ' 个运行中节点？'); } catch { return; }
+            for (const n of targets) { try { await fetch('/api/tasks/nodes/' + n.id + '/stop', {method:'POST'}); } catch(e) {} }
+            ElementPlus.ElMessage.success('已停止 ' + targets.length + ' 个节点');
+        }
+        async function batchApproveAll() {
+            const targets = nodeList.value.filter(n => n.task_status === 'awaiting_approval' && n.task_id);
+            if (!targets.length) return;
+            try { await ElementPlus.ElMessageBox.confirm('确认 ' + targets.length + ' 个节点的结算？'); } catch { return; }
+            for (const n of targets) { try { await fetch('/api/tasks/' + n.task_id + '/approve', {method:'POST'}); } catch(e) {} }
+            ElementPlus.ElMessage.success('已确认 ' + targets.length + ' 个节点的结算');
         }
 
         async function updateAllNodes() {
@@ -1460,6 +1501,7 @@ const app = createApp({
             logAutoScroll, logPanelRef, filteredLogs, logColor, onLogScroll,
             taskPlans, showCreatePlan, newPlan, planNodeEnabled, planNodeConfigs,
             submitPlan, executePlan, deletePlan, togglePlanNode, planUploadImage,
+            batchStartAll, batchStopAll, batchApproveAll,
             updateAllNodes, updateNodeCode, deleteNode, startTask, stopTask, approveCheckout, rejectCheckout,
             showConfig, configTitle, configForm, imageList, shopList,
             openConfig, saveConfig, onFileChange, onDrop, onSelectExisting,
