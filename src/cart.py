@@ -1194,25 +1194,28 @@ def _mouse_click_item(cart_page, coord):
     cart_page.wait_for_timeout(2000)
 
 
-def _read_bottom_bar_amount(cart_page) -> float:
-    """读取底部收银台的实时金额。"""
-    try:
-        result = cart_page.evaluate("""() => {
-            // 底部栏 class 含 bottom-bar 或 sticky
-            var bars = document.querySelectorAll('[class*="bottom-bar"], [class*="sticky"], [class*="totalInfo"]');
-            for (var i = 0; i < bars.length; i++) {
-                var txt = (bars[i].innerText || '').trim();
-                // 找 ¥ 后面的金额
-                var m = txt.match(/[¥￥]\\s*([\\d,]+\\.?\\d*)/);
-                if (m) {
-                    var v = parseFloat(m[1].replace(/,/g, ''));
-                    if (v >= 0) return v;
+def _read_bottom_bar_amount(cart_page, retries: int = 3) -> float:
+    """读取底部收银台的实时金额（带重试，等待服务器响应）。"""
+    for attempt in range(retries):
+        try:
+            result = cart_page.evaluate("""() => {
+                var bars = document.querySelectorAll('[class*="bottom-bar"], [class*="sticky"], [class*="totalInfo"]');
+                for (var i = 0; i < bars.length; i++) {
+                    var txt = (bars[i].innerText || '').trim();
+                    var m = txt.match(/[¥￥]\\s*([\\d,]+\\.?\\d*)/);
+                    if (m) {
+                        var v = parseFloat(m[1].replace(/,/g, ''));
+                        if (v >= 0) return v;
+                    }
                 }
-            }
-            return -1;
-        }""")
-        return float(result) if result is not None else -1.0
-    except Exception:
+                return -1;
+            }""")
+            if result is not None and result >= 0:
+                return float(result)
+        except Exception:
+            pass
+        if attempt < retries - 1:
+            cart_page.wait_for_timeout(2000)
         return -1.0
 
 
@@ -1471,10 +1474,16 @@ def _adjust_group_to_fit(cart_page, group_indices: list, all_items: list, order_
     price_map = {it['index']: it['price'] for it in all_items}
 
     for round_num in range(10):
-        real_amount = _read_bottom_bar_amount(cart_page)
+        # 等待服务器响应后再读金额
+        cart_page.wait_for_timeout(2000)
+        real_amount = _read_bottom_bar_amount(cart_page, retries=5)
         if real_amount <= 0:
-            logger.warning("无法读取收银台金额")
-            return -1.0
+            logger.warning("无法读取收银台金额，再等3秒重试...")
+            cart_page.wait_for_timeout(3000)
+            real_amount = _read_bottom_bar_amount(cart_page, retries=3)
+            if real_amount <= 0:
+                logger.warning("仍无法读取收银台金额")
+                return -1.0
 
         if real_amount <= order_limit:
             logger.info(f"  调整完成（第{round_num}轮）: ¥{real_amount:.2f} ≤ ¥{order_limit}")
@@ -1496,18 +1505,22 @@ def _adjust_group_to_fit(cart_page, group_indices: list, all_items: list, order_
             to_remove = max(selected, key=lambda idx: price_map.get(idx, 0))
 
         # 取消勾选
-        logger.info(f"  取消商品[{to_remove}] (¥{price_map.get(to_remove, 0):.2f})")
+        logger.info(f"  取消商品[{to_remove}] (小计¥{price_map.get(to_remove, 0):.2f})")
         coord = _get_one_checkbox_coord(cart_page, to_remove)
-        if coord:
+        if coord and coord.get('checked', False):
             cart_page.mouse.click(coord['x'], coord['y'])
-            cart_page.wait_for_timeout(2000)
+            cart_page.wait_for_timeout(3000)
         selected.discard(to_remove)
         excluded.add(to_remove)
 
         # 读取取消后的金额
-        after_remove = _read_bottom_bar_amount(cart_page)
+        after_remove = _read_bottom_bar_amount(cart_page, retries=5)
         if after_remove <= 0:
-            continue
+            cart_page.wait_for_timeout(3000)
+            after_remove = _read_bottom_bar_amount(cart_page, retries=3)
+            if after_remove <= 0:
+                logger.warning("取消后无法读取金额，继续")
+                continue
         logger.info(f"  取消后: ¥{after_remove:.2f}")
 
         if after_remove > order_limit:
