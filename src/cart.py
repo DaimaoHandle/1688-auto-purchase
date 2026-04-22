@@ -793,6 +793,7 @@ def _fill_cart_from_current_page(context, shop_page, cart_config, added_count, l
 
         # 采购去重：从商品卡片链接中提取 offerId，批量查询已采购记录
         if shop_name:
+            logger.info(f"{prefix}开始采购去重检查（店铺: {shop_name}）...")
             try:
                 offer_id_map = shop_page.evaluate("""() => {
                     var result = {};
@@ -833,8 +834,10 @@ def _fill_cart_from_current_page(context, shop_page, cart_config, added_count, l
                         skipped = before_count - len(items)
                         if skipped > 0:
                             logger.info(f"{prefix}去重过滤: 跳过 {skipped} 个已采购商品")
+                else:
+                    logger.info(f"{prefix}未提取到 offerId，跳过去重")
             except Exception as e:
-                logger.debug(f"去重过滤异常: {e}")
+                logger.warning(f"去重过滤异常: {e}")
 
         # 优先采购无销量商品：一次性扫描页面，获取有销量的商品图片src集合
         try:

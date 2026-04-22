@@ -48,10 +48,14 @@ def check_purchased_batch(shop_name: str, offer_ids: list) -> set:
     批量检查哪些 offerId 已采购过。
     返回已采购的 offerId 集合。
     """
-    if not _server_base_url or not offer_ids or not shop_name:
+    if not _server_base_url:
+        logger.warning("采购历史API未设置，跳过去重")
+        return set()
+    if not offer_ids or not shop_name:
         return set()
 
     try:
+        logger.info(f"查询采购历史: {shop_name}, {len(offer_ids)} 个商品")
         data = json.dumps({"shop_name": shop_name, "offer_ids": offer_ids}).encode("utf-8")
         req = urllib.request.Request(
             f"{_server_base_url}/api/purchased/check",
@@ -61,7 +65,9 @@ def check_purchased_batch(shop_name: str, offer_ids: list) -> set:
         )
         with urllib.request.urlopen(req, timeout=10) as resp:
             result = json.loads(resp.read().decode("utf-8"))
-            return set(result.get("purchased", []))
+            purchased = set(result.get("purchased", []))
+            logger.info(f"已采购: {len(purchased)} 个")
+            return purchased
     except Exception as e:
         logger.warning(f"查询采购历史失败: {e}")
         return set()
