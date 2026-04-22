@@ -687,9 +687,30 @@ def add_item_to_cart(context, item_el, shop_page=None, shop_name: str = "") -> f
             logger.warning("未能调整数量为1，加购可能失败")
         random_delay(0.3, 0.6)
 
+        # 验证数量确实为1（防止起批量或重复点击导致数量>1）
+        try:
+            qty = detail_page.evaluate("""() => {
+                var inp = document.querySelector('.ant-input-number-input, [class*="number-picker"] input, [class*="quantity"] input');
+                return inp ? parseInt(inp.value) : null;
+            }""")
+            if qty and qty > 1:
+                logger.warning(f"数量为 {qty}，强制修正为 1")
+                detail_page.evaluate("""() => {
+                    var inp = document.querySelector('.ant-input-number-input, [class*="number-picker"] input, [class*="quantity"] input');
+                    if (inp) { inp.focus(); inp.value = '1'; inp.dispatchEvent(new Event('input', {bubbles:true})); inp.dispatchEvent(new Event('change', {bubbles:true})); }
+                }""")
+                detail_page.wait_for_timeout(500)
+        except Exception:
+            pass
+
         # 读取商品价格（选完规格和数量后读取，更准确）
         item_price = _get_detail_page_price(detail_page)
         logger.info(f"详情页商品价格: ¥{item_price:.2f}")
+
+        # 单品价格校验：单品+运费预留不能超过每单限额（默认500），否则无法正常结算
+        if item_price > 0 and item_price > 480:
+            logger.warning(f"单品价格 ¥{item_price:.2f} 过高（加运费可能超500），跳过")
+            return 0.0
 
         # 点击"加入采购车"
         success = _click_add_to_cart(detail_page)
@@ -1600,8 +1621,15 @@ def run_cart_checkout(context, order_limit: float = 500.0, shipping_reserve: flo
         logger.warning("采购车中未读取到商品")
         return 0
 
+    # 过滤掉单品价格超限的商品（单品+运费预留超过限额，无法独立结算）
+    oversized = [it for it in items if it['price'] > order_limit - shipping_reserve]
+    if oversized:
+        for it in oversized:
+            logger.warning(f"  单品超限，跳过: [{it['index']}] {it['name']} ¥{it['price']:.2f}")
+        items = [it for it in items if it['price'] <= order_limit - shipping_reserve]
+
     total_amount = sum(it['price'] for it in items)
-    logger.info(f"采购车共 {len(items)} 件商品，总金额 ¥{total_amount:.2f}:")
+    logger.info(f"采购车共 {len(items)} 件可结算商品，总金额 ¥{total_amount:.2f}:")
     for it in items:
         logger.info(f"  [{it['index']}] {it['name']} | ¥{it['price']:.2f}")
 
