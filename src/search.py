@@ -253,9 +253,10 @@ def image_search(context, page, image_path: str):
 def shop_search(context, page, shop_name: str):
     """
     搜店模式：在 1688 首页搜索框中输入完整店铺名进行搜索。
+    模拟真实用户操作：点击搜索框 → 输入店铺名 → 点击"搜 索"按钮。
     返回搜索结果页面对象。
     """
-    from src.login import wait_for_verification
+    from src.login import wait_for_verification, is_verification_page
 
     if not shop_name:
         raise RuntimeError("未配置目标店铺名称")
@@ -263,87 +264,115 @@ def shop_search(context, page, shop_name: str):
     logger.info(f"搜店模式：搜索店铺 [{shop_name}]")
 
     # 确保在 1688 首页
-    if '1688.com' not in page.url or 'detail' in page.url or 'offer' in page.url:
-        page.goto("https://www.1688.com", wait_until="domcontentloaded")
-        page.wait_for_timeout(3000)
+    page.goto("https://www.1688.com", wait_until="domcontentloaded")
+    page.wait_for_timeout(5000)
 
-    # 找到搜索框并输入店铺名
-    try:
-        # 点击搜索框激活
-        search_input = page.evaluate("""() => {
-            var inputs = document.querySelectorAll('input[type="text"], input[class*="search"], input[placeholder*="搜索"]');
-            for (var i = 0; i < inputs.length; i++) {
-                var r = inputs[i].getBoundingClientRect();
-                if (r.width > 200 && r.height > 20) {
-                    return {x: r.x + r.width/2, y: r.y + r.height/2};
-                }
+    url_before = page.url
+
+    # 1. 找到搜索框（ali-search-box 内的 input）并用鼠标点击激活
+    input_coord = page.evaluate("""() => {
+        // 找 ali-search-box 内的 input
+        var box = document.querySelector('.ali-search-box, [class*="search-box"], [class*="searchBox"]');
+        if (box) {
+            var inp = box.querySelector('input');
+            if (inp) {
+                var r = inp.getBoundingClientRect();
+                if (r.width > 100) return {x: r.x + r.width/2, y: r.y + r.height/2};
             }
-            return null;
-        }""")
+        }
+        // 兜底：找页面上最宽的 input
+        var inputs = document.querySelectorAll('input');
+        for (var i = 0; i < inputs.length; i++) {
+            var r2 = inputs[i].getBoundingClientRect();
+            if (r2.width > 300 && r2.height > 20) {
+                return {x: r2.x + r2.width/2, y: r2.y + r2.height/2};
+            }
+        }
+        return null;
+    }""")
 
-        if not search_input:
-            raise RuntimeError("未找到搜索框")
+    if not input_coord:
+        raise RuntimeError("未找到搜索框")
 
-        # 点击搜索框
-        page.mouse.click(search_input['x'], search_input['y'])
-        page.wait_for_timeout(500)
+    # 点击搜索框
+    page.mouse.click(input_coord['x'], input_coord['y'])
+    page.wait_for_timeout(800)
+    logger.info(f"已点击搜索框 ({input_coord['x']:.0f},{input_coord['y']:.0f})")
 
-        # 清空并输入店铺名
-        page.keyboard.press("Control+a")
-        page.wait_for_timeout(200)
-        page.keyboard.type(shop_name, delay=50)
-        page.wait_for_timeout(500)
-        logger.info(f"已输入店铺名: {shop_name}")
+    # 2. 清空并输入店铺名
+    page.keyboard.press("Control+a")
+    page.wait_for_timeout(200)
+    page.keyboard.press("Backspace")
+    page.wait_for_timeout(200)
+    page.keyboard.type(shop_name, delay=30)
+    page.wait_for_timeout(1000)
+    logger.info(f"已输入店铺名: {shop_name}")
 
-        # 点击搜索按钮
-        search_btn = page.evaluate("""() => {
-            var all = document.querySelectorAll('button, div, a, span');
-            for (var i = 0; i < all.length; i++) {
-                var txt = String(all[i].innerText || '').trim();
-                if ((txt === '搜索' || txt === '搜 索') && all[i].tagName !== 'INPUT') {
-                    var r = all[i].getBoundingClientRect();
-                    if (r.width > 30 && r.height > 20) {
-                        return {x: r.x + r.width/2, y: r.y + r.height/2};
+    # 3. 找到"搜 索"按钮（class="input-button"）并用鼠标点击
+    btn_coord = page.evaluate("""() => {
+        // 精确匹配 class="input-button"
+        var btn = document.querySelector('.input-button');
+        if (btn) {
+            var r = btn.getBoundingClientRect();
+            if (r.width > 20 && r.height > 20) return {x: r.x + r.width/2, y: r.y + r.height/2, txt: btn.innerText};
+        }
+        // 兜底：找文字含"搜"的 div/button
+        var all = document.querySelectorAll('button, div');
+        for (var i = 0; i < all.length; i++) {
+            var txt = String(all[i].innerText || '').trim();
+            if (txt.indexOf('搜') !== -1 && txt.length <= 4) {
+                var cls = String(all[i].className || '');
+                if (cls.indexOf('button') !== -1 || cls.indexOf('btn') !== -1 || cls.indexOf('search') !== -1) {
+                    var r2 = all[i].getBoundingClientRect();
+                    if (r2.width > 20 && r2.height > 20 && r2.width < 200) {
+                        return {x: r2.x + r2.width/2, y: r2.y + r2.height/2, txt: txt};
                     }
                 }
             }
-            return null;
-        }""")
+        }
+        return null;
+    }""")
 
-        if search_btn:
-            page.mouse.click(search_btn['x'], search_btn['y'])
-            logger.info("已点击搜索按钮")
-        else:
-            # 按 Enter 搜索
-            page.keyboard.press("Enter")
-            logger.info("按 Enter 搜索")
+    if btn_coord:
+        page.mouse.click(btn_coord['x'], btn_coord['y'])
+        logger.info(f"已点击搜索按钮: \"{btn_coord.get('txt', '')}\" ({btn_coord['x']:.0f},{btn_coord['y']:.0f})")
+    else:
+        # 兜底：按 Enter
+        page.keyboard.press("Enter")
+        logger.info("搜索按钮未找到，按 Enter 搜索")
 
-        page.wait_for_timeout(3000)
-
-    except Exception as e:
-        raise RuntimeError(f"搜店失败: {e}")
+    # 4. 等待页面跳转到搜索结果
+    page.wait_for_timeout(3000)
 
     # 检测验证码
-    if wait_for_verification:
-        from src.login import is_verification_page
-        if is_verification_page(page):
-            wait_for_verification(page)
+    if is_verification_page(page):
+        wait_for_verification(page)
 
-    # 检查是否在新标签页
-    url_before = "www.1688.com"
+    # 检查是否有新标签打开
     try:
         pages = context.pages
         for p in pages:
-            if p != page and ('s.1688.com' in p.url or 'search' in p.url):
+            if p != page and ('s.1688.com' in p.url or 'search' in p.url or 'offer_search' in p.url):
                 p.wait_for_load_state("domcontentloaded")
                 p.wait_for_timeout(2000)
+                if is_verification_page(p):
+                    wait_for_verification(p)
                 logger.info(f"搜店结果页（新标签）: {p.url}")
                 return p
     except Exception:
         pass
 
-    # 当前页跳转
+    # 等待当前页 URL 变化
+    try:
+        page.wait_for_url(lambda url: url != url_before, timeout=10000)
+    except Exception:
+        pass
+
     page.wait_for_load_state("domcontentloaded")
     page.wait_for_timeout(2000)
+
+    if is_verification_page(page):
+        wait_for_verification(page)
+
     logger.info(f"搜店结果页: {page.url}")
     return page
