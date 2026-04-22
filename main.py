@@ -44,9 +44,14 @@ def main():
             logger.warning("未能获取采购车URL，结算功能可能不可用")
             errors.append("未能获取采购车URL")
 
-        # 搜图
-        image_path = config["search"]["image_path"]
-        result_page = image_search(context, page, image_path)
+        # 搜索
+        search_mode = config.get("search", {}).get("search_mode", "image")
+        if search_mode == "shop":
+            from src.search import shop_search
+            result_page = shop_search(context, page, config["search"]["target_shop_name"])
+        else:
+            image_path = config["search"]["image_path"]
+            result_page = image_search(context, page, image_path)
 
         # 找到目标店铺并进入全店商品列表
         shop_name = config["search"]["target_shop_name"]

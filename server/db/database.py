@@ -107,6 +107,7 @@ CREATE TABLE IF NOT EXISTS task_plan_items (
     node_id     TEXT NOT NULL,
     shop_name   TEXT NOT NULL DEFAULT '',
     image_id    TEXT,
+    search_mode TEXT NOT NULL DEFAULT 'image',
     target_amount REAL NOT NULL DEFAULT 2000,
     purchase_mode TEXT NOT NULL DEFAULT 'normal',
     order_limit REAL NOT NULL DEFAULT 500,
@@ -165,6 +166,7 @@ async def _migrate(db):
         ("reports", "buyer_info", "TEXT NOT NULL DEFAULT ''"),
         ("reports", "actual_amount", "REAL NOT NULL DEFAULT 0.0"),
         ("reports", "target_amount", "REAL NOT NULL DEFAULT 0.0"),
+        ("task_plan_items", "search_mode", "TEXT NOT NULL DEFAULT 'image'"),
         ("task_logs", "event_type", "TEXT NOT NULL DEFAULT 'runtime'"),
         ("task_logs", "phase", "TEXT NOT NULL DEFAULT ''"),
     ]

@@ -617,6 +617,12 @@ html, body, #app { height: 100%; margin: 0; }
                 <el-option v-for="s in shopList" :key="s" :label="s" :value="s" />
             </el-select>
         </el-form-item>
+        <el-form-item label="搜索模式">
+            <el-radio-group v-model="configForm.searchMode">
+                <el-radio value="image">搜图模式（以图搜图）</el-radio>
+                <el-radio value="shop">搜店模式（搜索店铺名）</el-radio>
+            </el-radio-group>
+        </el-form-item>
         <el-form-item label="采购模式">
             <el-radio-group v-model="configForm.purchaseMode">
                 <el-radio value="normal">正常采购</el-radio>
@@ -732,6 +738,13 @@ html, body, #app { height: 100%; margin: 0; }
             <div>
                 <div style="font-size:12px;color:#909399;margin-bottom:4px">目标金额</div>
                 <el-input-number v-model="planNodeConfigs[n.id].target_amount" :min="100" :step="500" size="small" style="width:100%" />
+            </div>
+            <div>
+                <div style="font-size:12px;color:#909399;margin-bottom:4px">搜索模式</div>
+                <el-radio-group v-model="planNodeConfigs[n.id].search_mode" size="small">
+                    <el-radio value="image">搜图</el-radio>
+                    <el-radio value="shop">搜店</el-radio>
+                </el-radio-group>
             </div>
             <div>
                 <div style="font-size:12px;color:#909399;margin-bottom:4px">采购模式</div>
@@ -927,7 +940,7 @@ const app = createApp({
         ];
         const configForm = reactive({
             shopName: '', targetAmount: 2000, orderLimit: 500,
-            purchaseMode: 'normal', shippingReserve: 15, maxItems: 200, imageId: null,
+            searchMode: 'image', purchaseMode: 'normal', shippingReserve: 15, maxItems: 200, imageId: null,
             selectedImage: '', imagePreview: null,
         });
 
@@ -1180,6 +1193,7 @@ const app = createApp({
                 configForm.shopName = (cfg.search||{}).target_shop_name || '';
                 configForm.targetAmount = (cfg.cart||{}).target_amount || 2000;
                 configForm.orderLimit = (cfg.cart||{}).order_limit || 500;
+                configForm.searchMode = (cfg.search||{}).search_mode || 'image';
                 configForm.purchaseMode = (cfg.cart||{}).purchase_mode || 'normal';
                 configForm.shippingReserve = (cfg.cart||{}).shipping_reserve || 15;
                 configForm.maxItems = (cfg.cart||{}).max_items || 200;
@@ -1212,7 +1226,7 @@ const app = createApp({
         async function saveConfig() {
             const config = {
                 browser: {type:'chromium', headless:false, slow_mo:100, profile_dir:'~/1688/browser_profile'},
-                search: {image_path:'', target_shop_name:configForm.shopName},
+                search: {image_path:'', target_shop_name:configForm.shopName, search_mode:configForm.searchMode},
                 cart: {target_amount:configForm.targetAmount, amount_strategy:'not_exceed', purchase_mode:configForm.purchaseMode, max_items:configForm.maxItems, order_limit:configForm.orderLimit, shipping_reserve:configForm.shippingReserve},
                 timeouts: {page_load:30000, element_wait:10000, login_wait:120000},
                 logging: {level:'INFO', file:'logs/app.log'},
@@ -1360,7 +1374,7 @@ const app = createApp({
         function togglePlanNode(nodeId) {
             planNodeEnabled[nodeId] = !planNodeEnabled[nodeId];
             if (planNodeEnabled[nodeId] && !planNodeConfigs[nodeId]) {
-                planNodeConfigs[nodeId] = {shop_name:'', image_id:'', target_amount:2000, purchase_mode:'normal', order_limit:500, shipping_reserve:15, max_items:200};
+                planNodeConfigs[nodeId] = {shop_name:'', image_id:'', search_mode:'image', target_amount:2000, purchase_mode:'normal', order_limit:500, shipping_reserve:15, max_items:200};
             }
         }
 

@@ -529,16 +529,28 @@ class PurchaseWorker:
                     pass
 
     def _do_searching(self):
-        """以图搜图。"""
+        """搜索商品：搜图模式或搜店模式。"""
         config = self.task_data["config"]
         context = self.runtime["context"]
         page = self.runtime["page"]
+        search_mode = config.get("search", {}).get("search_mode", "image")
 
-        from src.search import image_search
-        search_image = config.get("search", {}).get("image_path", "")
-        if not search_image:
-            raise FatalError("未配置搜索图片")
-        self.runtime["result_page"] = image_search(context, page, search_image)
+        if search_mode == "shop":
+            # 搜店模式：在搜索框输入店铺名搜索
+            from src.search import shop_search
+            shop_name = config.get("search", {}).get("target_shop_name", "")
+            if not shop_name:
+                raise FatalError("未配置目标店铺名称")
+            logger.info(f"搜店模式：搜索 [{shop_name}]")
+            self.runtime["result_page"] = shop_search(context, page, shop_name)
+        else:
+            # 搜图模式：以图搜图
+            from src.search import image_search
+            search_image = config.get("search", {}).get("image_path", "")
+            if not search_image:
+                raise FatalError("未配置搜索图片")
+            logger.info("搜图模式：以图搜图")
+            self.runtime["result_page"] = image_search(context, page, search_image)
 
     def _do_entering_shop(self):
         """定位目标店铺。"""

@@ -20,6 +20,7 @@ class PlanItem(BaseModel):
     node_id: str
     shop_name: str = ""
     image_id: Optional[str] = None
+    search_mode: str = "image"
     target_amount: float = 2000
     purchase_mode: str = "normal"
     order_limit: float = 500
@@ -52,10 +53,10 @@ async def create_plan(req: CreatePlanRequest, request: Request):
         for item in req.items:
             await db.execute(
                 """INSERT INTO task_plan_items
-                   (plan_id, node_id, shop_name, image_id, target_amount, purchase_mode, order_limit, shipping_reserve, max_items)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                   (plan_id, node_id, shop_name, image_id, search_mode, target_amount, purchase_mode, order_limit, shipping_reserve, max_items)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (plan_id, item.node_id, item.shop_name, item.image_id,
-                 item.target_amount, item.purchase_mode, item.order_limit,
+                 item.search_mode, item.target_amount, item.purchase_mode, item.order_limit,
                  item.shipping_reserve, item.max_items)
             )
         await db.commit()
@@ -157,7 +158,7 @@ async def _execute_plan(plan_id: str):
             # 构建配置
             config = {
                 "browser": {"type": "chromium", "headless": False, "slow_mo": 100, "profile_dir": "~/1688/browser_profile"},
-                "search": {"image_path": "", "target_shop_name": item["shop_name"]},
+                "search": {"image_path": "", "target_shop_name": item["shop_name"], "search_mode": item.get("search_mode", "image")},
                 "cart": {
                     "target_amount": item["target_amount"],
                     "amount_strategy": "not_exceed",
