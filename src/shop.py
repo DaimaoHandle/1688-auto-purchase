@@ -112,6 +112,7 @@ def _scan_current_cards(page, shop_name: str):
         ".shop-name",
         ".company-name",
         ".offer-company-name",
+        ".desc-text",
     ]
     for sel in SHOP_NAME_DIRECT_SELECTORS:
         name_els = page.query_selector_all(sel)
@@ -121,16 +122,24 @@ def _scan_current_cards(page, shop_name: str):
                 if not name_text or not _match_shop_name(name_text, shop_name):
                     continue
                 logger.info(f"找到目标店铺商品，显示名: 「{name_text}」")
-                # 向上最多 12 层，找到含商品详情链接的祖先，返回那个 <a>
+                # 向上最多 12 层，找到含商品链接的祖先，返回那个 <a>
                 product_link = page.evaluate_handle("""el => {
                     let node = el;
                     for (let i = 0; i < 12; i++) {
                         node = node.parentElement;
                         if (!node) break;
+                        // 找商品详情链接
                         const a = node.querySelector(
-                            'a[href*="detail.1688.com"], a[href*="/offer/"]'
+                            'a[href*="detail.1688.com"], a[href*="/offer/"], a[href*="1688.com"]'
                         );
-                        if (a) return a;
+                        if (a) {
+                            const href = a.getAttribute('href') || '';
+                            // 排除功能性链接
+                            if (href.indexOf('login') === -1 && href.indexOf('cart') === -1
+                                && href.indexOf('javascript') === -1) {
+                                return a;
+                            }
+                        }
                     }
                     return null;
                 }""", name_el)
