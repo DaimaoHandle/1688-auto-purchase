@@ -190,14 +190,12 @@ def _find_shop_item(page, shop_name: str, max_loads: int = 10):
         return card
 
     loads_done = 0
+    scroll_step = 1500  # 每次向下滚动 1500px（约一屏半）
     while loads_done < max_loads:
         prev_height = page.evaluate("() => document.body.scrollHeight")
-        current_scroll = page.evaluate("() => window.scrollY")
-        viewport_height = page.evaluate("() => window.innerHeight")
 
-        # 每次向下滚动一屏高度（而不是直接跳到底部）
-        next_scroll = current_scroll + viewport_height
-        page.evaluate(f"() => window.scrollTo(0, {next_scroll})")
+        # 每次向下滚动固定距离
+        page.evaluate(f"() => window.scrollBy(0, {scroll_step})")
 
         # 等待新内容加载（高度增加或到达底部）
         new_content_loaded = False
