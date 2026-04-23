@@ -175,14 +175,14 @@ def _scan_current_cards(page, shop_name: str):
     return None
 
 
-def _find_shop_item(page, shop_name: str, max_loads: int = 1):
+def _find_shop_item(page, shop_name: str, max_loads: int = 10):
     """
     在搜索结果页中找到目标店铺的第一个商品。
-    每次滚动到底部后，等待页面高度实际增加（即新内容加载出来），
-    才计为一次「加载」，最多加载 max_loads 次新内容。
+    逐步向下滚动（每次滚动一屏高度），触发懒加载，
+    每次滚动后扫描新内容，最多加载 max_loads 次。
     """
     # 等待首屏商品加载
-    page.wait_for_timeout(2000)
+    page.wait_for_timeout(3000)
 
     # 先扫描首屏
     card = _scan_current_cards(page, shop_name)
@@ -191,33 +191,38 @@ def _find_shop_item(page, shop_name: str, max_loads: int = 1):
 
     loads_done = 0
     while loads_done < max_loads:
-        # 记录滚动前的高度和卡片数
         prev_height = page.evaluate("() => document.body.scrollHeight")
+        current_scroll = page.evaluate("() => window.scrollY")
+        viewport_height = page.evaluate("() => window.innerHeight")
 
-        # 滚动到底部
-        page.evaluate("() => window.scrollTo(0, document.body.scrollHeight)")
+        # 每次向下滚动一屏高度（而不是直接跳到底部）
+        next_scroll = current_scroll + viewport_height
+        page.evaluate(f"() => window.scrollTo(0, {next_scroll})")
 
-        # 等待高度增加，最多等 8 秒（每 500ms 检测一次）
+        # 等待新内容加载（高度增加或到达底部）
         new_content_loaded = False
-        for _ in range(16):
+        for _ in range(10):
             page.wait_for_timeout(500)
             new_height = page.evaluate("() => document.body.scrollHeight")
             if new_height > prev_height:
                 new_content_loaded = True
                 break
 
-        if not new_content_loaded:
-            logger.info("滚动后页面高度未变化，已到达结果末尾，停止加载")
-            break
-
+        # 即使高度没变也扫描（可能当前视口内有新渲染的内容）
         loads_done += 1
-        logger.info(f"新内容已加载 ({loads_done}/{max_loads})，扫描店铺...")
+        logger.info(f"滚动加载第 {loads_done}/{max_loads} 次，扫描店铺...")
 
         card = _scan_current_cards(page, shop_name)
         if card:
             return card
 
-    logger.warning(f"加载新内容 {loads_done} 次后仍未找到店铺: {shop_name}")
+        # 检查是否已到底部
+        at_bottom = page.evaluate("() => window.scrollY + window.innerHeight >= document.body.scrollHeight - 100")
+        if not new_content_loaded and at_bottom:
+            logger.info("已滚动到页面底部，停止加载")
+            break
+
+    logger.warning(f"滚动 {loads_done} 次后仍未找到店铺: {shop_name}")
     _dump_page_shop_names(page)
     return None
 
