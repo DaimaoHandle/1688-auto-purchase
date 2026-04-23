@@ -118,25 +118,31 @@ def _scan_current_cards(page, shop_name: str):
         name_els = page.query_selector_all(sel)
         for name_el in name_els:
             try:
+                # 只处理可见的元素
+                try:
+                    if not name_el.is_visible():
+                        continue
+                except Exception:
+                    pass
+
                 name_text = name_el.inner_text().strip()
                 if not name_text or not _match_shop_name(name_text, shop_name):
                     continue
-                logger.info(f"找到目标店铺商品，显示名: 「{name_text}」")
-                # 向上最多 12 层，找到含商品链接的祖先，返回那个 <a>
+                logger.info(f"找到目标店铺商品（可见），显示名: 「{name_text}」")
+
+                # 向上最多 12 层，找商品详情链接（排除相似搜索等非商品链接）
                 product_link = page.evaluate_handle("""el => {
                     let node = el;
                     for (let i = 0; i < 12; i++) {
                         node = node.parentElement;
                         if (!node) break;
-                        // 找商品详情链接
                         const a = node.querySelector(
-                            'a[href*="detail.1688.com"], a[href*="/offer/"], a[href*="1688.com"]'
+                            'a[href*="detail.1688.com"], a[href*="/offer/"]'
                         );
                         if (a) {
                             const href = a.getAttribute('href') || '';
-                            // 排除功能性链接
-                            if (href.indexOf('login') === -1 && href.indexOf('cart') === -1
-                                && href.indexOf('javascript') === -1) {
+                            if (href.indexOf('similar') === -1 && href.indexOf('login') === -1
+                                && href.indexOf('cart') === -1 && href.indexOf('javascript') === -1) {
                                 return a;
                             }
                         }
@@ -149,8 +155,8 @@ def _scan_current_cards(page, shop_name: str):
                     logger.info(f"找到商品详情链接: {href[:80]}")
                     return link_el
 
-                # 没有 detail 链接，返回店铺名元素本身，由调用方点击其上方区域
-                logger.info("未找到详情链接，将点击店铺名上方区域（商品图片位置）")
+                # 没有 detail 链接，返回店铺名元素本身（用于点击其附近的商品图片）
+                logger.info("未找到详情链接，将点击店铺名附近区域")
                 return name_el
             except Exception as ex:
                 logger.error(f"[DEBUG] 策略一异常: {ex}")
@@ -470,28 +476,38 @@ def find_shop_and_enter(context, result_page, shop_name: str):
                     pass
                 card.click(timeout=5000)
             else:
-                # 是店铺名元素，用 JS 滚动到可见，再点击其上方的商品图片区域
+                # 是店铺名元素，用 JS 找到附近的商品图片并点击
                 try:
                     result_page.evaluate("(el) => el.scrollIntoView({block:'center'})", card)
                     result_page.wait_for_timeout(1000)
                 except Exception:
                     pass
-                box = card.bounding_box()
-                if not box or box['width'] < 1:
-                    # 元素不可见，尝试用 JS 获取坐标
-                    coord = result_page.evaluate("""(el) => {
-                        var r = el.getBoundingClientRect();
-                        return r.width > 0 ? {x: r.x + r.width/2, y: r.y - 100} : null;
-                    }""", card)
-                    if coord:
-                        result_page.mouse.click(coord['x'], coord['y'])
-                    else:
-                        raise RuntimeError("无法获取店铺名元素坐标")
+
+                # 用 JS 从店铺名元素往上找卡片容器中的商品图片
+                img_coord = result_page.evaluate("""(el) => {
+                    var node = el;
+                    for (var i = 0; i < 10; i++) {
+                        node = node.parentElement;
+                        if (!node) break;
+                        var img = node.querySelector('img');
+                        if (img) {
+                            var r = img.getBoundingClientRect();
+                            if (r.width > 50 && r.height > 50) {
+                                return {x: r.x + r.width/2, y: r.y + r.height/2};
+                            }
+                        }
+                    }
+                    // 兜底：用店铺名上方区域
+                    var r2 = el.getBoundingClientRect();
+                    if (r2.width > 0) return {x: r2.x + r2.width/2, y: r2.y - 80};
+                    return null;
+                }""", card)
+
+                if img_coord:
+                    logger.info(f"点击商品图片区域 ({img_coord['x']:.0f},{img_coord['y']:.0f})")
+                    result_page.mouse.click(img_coord['x'], img_coord['y'])
                 else:
-                    click_x = box["x"] + box["width"] / 2
-                    click_y = box["y"] - 100
-                    logger.info(f"店铺名坐标: x={box['x']:.0f}, y={box['y']:.0f}，点击上方 y={click_y:.0f}")
-                    result_page.mouse.click(click_x, click_y)
+                    raise RuntimeError("无法获取店铺名元素坐标")
         except Exception as e:
             raise RuntimeError(f"点击商品失败: {e}")
 
