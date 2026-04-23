@@ -461,21 +461,37 @@ def find_shop_and_enter(context, result_page, shop_name: str):
         try:
             href = card.get_attribute("href") if hasattr(card, "get_attribute") else None
             if href and ("detail.1688.com" in href or "/offer/" in href):
-                # 直接是商品详情链接，点击它
+                # 直接是商品详情链接，用 JS 滚动到元素再点击
                 logger.info(f"点击详情链接: {href[:80]}")
-                card.click()
+                try:
+                    result_page.evaluate("(el) => el.scrollIntoView({block:'center'})", card)
+                    result_page.wait_for_timeout(1000)
+                except Exception:
+                    pass
+                card.click(timeout=5000)
             else:
-                # 是店铺名元素，先滚入视口，再点击其上方的商品图片区域
-                card.scroll_into_view_if_needed()
-                result_page.wait_for_timeout(800)
+                # 是店铺名元素，用 JS 滚动到可见，再点击其上方的商品图片区域
+                try:
+                    result_page.evaluate("(el) => el.scrollIntoView({block:'center'})", card)
+                    result_page.wait_for_timeout(1000)
+                except Exception:
+                    pass
                 box = card.bounding_box()
-                if not box:
-                    raise RuntimeError("无法获取店铺名元素坐标")
-                # 商品图片通常在店铺名上方约 100px 处
-                click_x = box["x"] + box["width"] / 2
-                click_y = box["y"] - 100
-                logger.info(f"店铺名坐标: x={box['x']:.0f}, y={box['y']:.0f}，点击上方 y={click_y:.0f}")
-                result_page.mouse.click(click_x, click_y)
+                if not box or box['width'] < 1:
+                    # 元素不可见，尝试用 JS 获取坐标
+                    coord = result_page.evaluate("""(el) => {
+                        var r = el.getBoundingClientRect();
+                        return r.width > 0 ? {x: r.x + r.width/2, y: r.y - 100} : null;
+                    }""", card)
+                    if coord:
+                        result_page.mouse.click(coord['x'], coord['y'])
+                    else:
+                        raise RuntimeError("无法获取店铺名元素坐标")
+                else:
+                    click_x = box["x"] + box["width"] / 2
+                    click_y = box["y"] - 100
+                    logger.info(f"店铺名坐标: x={box['x']:.0f}, y={box['y']:.0f}，点击上方 y={click_y:.0f}")
+                    result_page.mouse.click(click_x, click_y)
         except Exception as e:
             raise RuntimeError(f"点击商品失败: {e}")
 
