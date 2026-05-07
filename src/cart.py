@@ -906,6 +906,7 @@ def _fill_cart_from_current_page(context, shop_page, cart_config, added_count, l
         items_with_flag.sort(key=lambda x: (1 if x[1] else 0))
         items_sorted = [item for item, _ in items_with_flag]
 
+        not_exceed_skip = 0  # 因 not_exceed 策略跳过的连续计数
         for item_el in items_sorted:
             _checkpoint()  # 检查点：处理下一个商品前
             if cancel_check and cancel_check():
@@ -923,8 +924,14 @@ def _fill_cart_from_current_page(context, shop_page, cart_config, added_count, l
 
             if strategy == "not_exceed":
                 est_price = _get_item_price(item_el)
+                remaining = target - local_amount
                 if est_price > 0 and local_amount + est_price > target:
-                    continue
+                    not_exceed_skip += 1
+                    # 列表页估价不一定准确，允许最多超出 5% 以尽量接近目标
+                    if est_price > remaining * 1.05:
+                        continue
+                    else:
+                        logger.info(f"{prefix}估价 ¥{est_price:.2f} 略超剩余 ¥{remaining:.2f}，尝试加购（列表估价可能不准）")
 
             if check_for_verification(shop_page):
                 wait_for_verification_clear(shop_page)
@@ -934,6 +941,7 @@ def _fill_cart_from_current_page(context, shop_page, cart_config, added_count, l
                 added_count += 1
                 local_amount += item_price
                 breaker.record_success()
+                not_exceed_skip = 0
                 logger.info(f"{prefix}[{added_count}] 商品 ¥{item_price:.2f} | 累计 ¥{local_amount:.2f} / ¥{target}")
                 print(f"  {prefix}已加入 {added_count} 件 | ¥{item_price:.2f} | 累计 ¥{local_amount:.2f} / ¥{target}")
                 if progress_callback:
@@ -956,6 +964,12 @@ def _fill_cart_from_current_page(context, shop_page, cart_config, added_count, l
                     return added_count, local_amount
 
             random_delay(0.5, 1.5)
+
+        # 如果本页大量商品因 not_exceed 被跳过，说明剩余商品价格普遍高于剩余空间
+        if not_exceed_skip >= len(items_sorted) * 0.8 and not_exceed_skip > 5:
+            remaining = target - local_amount
+            logger.info(f"{prefix}本页 {not_exceed_skip}/{len(items_sorted)} 个商品因超预算被跳过（剩余空间 ¥{remaining:.2f}），停止翻页")
+            break
 
         _checkpoint()  # 检查点：翻页前
         logger.info(f"{prefix}第{page_num}页完毕，尝试翻页...")
@@ -1581,39 +1595,58 @@ def _adjust_group_to_fit(cart_page, group_indices: list, all_items: list, order_
             # 还是超限，继续下一轮
             continue
 
-        # 有剩余空间，尝试补入一个商品
+        # 有剩余空间，循环尝试补入商品（从最贵的开始，逐个尝试直到成功或无候选）
         gap = order_limit - after_remove
-        # 候选：不在已勾选中、不在本组已排除中的商品，且价格 ≤ gap
-        candidates_to_add = [
-            idx for idx in all_indices
-            if idx not in selected and idx not in excluded
-            and price_map.get(idx, 0) <= gap and price_map.get(idx, 0) > 0
-        ]
+        tried_add = set()  # 本轮已尝试补入的商品
+        while gap > 0:
+            # 候选：不在已勾选中、不在排除中、不在本轮已尝试中的商品，且价格 ≤ gap
+            candidates_to_add = [
+                idx for idx in all_indices
+                if idx not in selected and idx not in excluded and idx not in tried_add
+                and price_map.get(idx, 0) <= gap and price_map.get(idx, 0) > 0
+            ]
 
-        if candidates_to_add:
+            if not candidates_to_add:
+                logger.info(f"  无合适商品可补入（空间 ¥{gap:.2f}）")
+                break
+
             # 选价格最大的（最接近填满空间）
             to_add = max(candidates_to_add, key=lambda idx: price_map.get(idx, 0))
-            logger.info(f"  补入商品[{to_add}] (¥{price_map.get(to_add, 0):.2f})，剩余空间 ¥{gap:.2f}")
+            tried_add.add(to_add)
+            logger.info(f"  尝试补入商品[{to_add}] (¥{price_map.get(to_add, 0):.2f})，剩余空间 ¥{gap:.2f}")
             coord_add = _get_one_checkbox_coord(cart_page, to_add)
-            if coord_add and not coord_add.get('checked', False):
-                cart_page.mouse.click(coord_add['x'], coord_add['y'])
-                cart_page.wait_for_timeout(2000)
-                selected.add(to_add)
+            if not coord_add or coord_add.get('checked', False):
+                excluded.add(to_add)
+                continue
 
-                # 验证补入后是否仍在限额内
-                after_add = _read_bottom_bar_amount(cart_page)
-                logger.info(f"  补入后: ¥{after_add:.2f}")
-                if after_add > order_limit:
-                    # 补入后又超了（运费变化），取消刚补入的
-                    logger.info(f"  补入后超限，取消商品[{to_add}]")
-                    coord_add2 = _get_one_checkbox_coord(cart_page, to_add)
-                    if coord_add2:
-                        cart_page.mouse.click(coord_add2['x'], coord_add2['y'])
-                        cart_page.wait_for_timeout(2000)
-                    selected.discard(to_add)
-                    excluded.add(to_add)
-        else:
-            logger.info(f"  无合适商品可补入（空间 ¥{gap:.2f}）")
+            cart_page.mouse.click(coord_add['x'], coord_add['y'])
+            cart_page.wait_for_timeout(2000)
+            selected.add(to_add)
+
+            # 验证补入后是否仍在限额内
+            after_add = _read_bottom_bar_amount(cart_page)
+            logger.info(f"  补入后: ¥{after_add:.2f}")
+            if after_add > 0 and after_add <= order_limit:
+                # 补入成功且未超限，继续尝试补入下一个
+                gap = order_limit - after_add
+                continue
+            elif after_add > order_limit:
+                # 补入后超了（运费变化），取消刚补入的，尝试更便宜的
+                logger.info(f"  补入后超限，取消商品[{to_add}]，尝试更便宜的")
+                coord_add2 = _get_one_checkbox_coord(cart_page, to_add)
+                if coord_add2:
+                    cart_page.mouse.click(coord_add2['x'], coord_add2['y'])
+                    cart_page.wait_for_timeout(2000)
+                selected.discard(to_add)
+                excluded.add(to_add)
+                # 重新读取 gap，继续循环尝试下一个
+                after_cancel = _read_bottom_bar_amount(cart_page)
+                if after_cancel > 0:
+                    gap = order_limit - after_cancel
+                continue
+            else:
+                # 读取金额失败，停止补入
+                break
 
     # 最终检查
     final = _read_bottom_bar_amount(cart_page)
