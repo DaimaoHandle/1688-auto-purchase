@@ -2,7 +2,7 @@
 节点配置管理 API。
 """
 import json
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 from typing import Optional
 
@@ -72,7 +72,7 @@ async def get_config(node_id: str):
 
 
 @router.put("/{node_id}/config")
-async def save_config(node_id: str, req: SaveConfigRequest):
+async def save_config(node_id: str, req: SaveConfigRequest, request: Request = None):
     """保存/更新节点的采购配置。"""
     db = await get_db()
     try:
@@ -94,4 +94,6 @@ async def save_config(node_id: str, req: SaveConfigRequest):
     finally:
         await db.close()
 
+    from server.api.audit import log_action
+    await log_action(request, "保存配置", node_id)
     return {"ok": True}

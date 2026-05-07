@@ -10,6 +10,7 @@ from typing import Optional
 from server.db.database import get_db
 from server.services.node_manager import node_manager
 from shared.protocol import make_message, MSG_UPDATE_CODE
+from server.api.audit import log_action
 
 router = APIRouter(prefix="/api/nodes", tags=["nodes"])
 
@@ -102,7 +103,7 @@ async def today_stats():
 
 
 @router.post("/tokens")
-async def create_node(req: CreateNodeRequest):
+async def create_node(req: CreateNodeRequest, request: Request = None):
     """生成新节点的 ID 和 Token。"""
     node_id = str(uuid.uuid4())[:8]
     token = secrets.token_hex(32)
@@ -122,6 +123,7 @@ async def create_node(req: CreateNodeRequest):
     finally:
         await db.close()
 
+    await log_action(request, "添加节点", node_id, f"名称: {name}")
     return {"node_id": node_id, "token": token, "name": name}
 
 
@@ -161,7 +163,7 @@ async def get_node(node_id: str):
 
 
 @router.patch("/{node_id}")
-async def update_node(node_id: str, req: UpdateNodeRequest):
+async def update_node(node_id: str, req: UpdateNodeRequest, request: Request = None):
     """更新节点信息。"""
     db = await get_db()
     try:
@@ -194,11 +196,12 @@ async def update_node(node_id: str, req: UpdateNodeRequest):
     if state and req.name is not None:
         state.name = req.name
 
+    await log_action(request, "编辑节点", node_id)
     return {"ok": True}
 
 
 @router.post("/{node_id}/update")
-async def update_node_code(node_id: str):
+async def update_node_code(node_id: str, request: Request = None):
     """向指定节点发送代码更新指令（git pull）。"""
     node = node_manager.get(node_id)
     if not node:
@@ -206,11 +209,12 @@ async def update_node_code(node_id: str):
     if not node.online or not node.ws:
         raise HTTPException(400, "节点离线")
     await node.ws.send_text(make_message(MSG_UPDATE_CODE, {}))
+    await log_action(request, "更新代码", node_id)
     return {"ok": True}
 
 
 @router.delete("/{node_id}")
-async def delete_node(node_id: str):
+async def delete_node(node_id: str, request: Request = None):
     """删除节点。"""
     db = await get_db()
     try:
@@ -219,4 +223,5 @@ async def delete_node(node_id: str):
         await db.commit()
     finally:
         await db.close()
+    await log_action(request, "删除节点", node_id)
     return {"ok": True}

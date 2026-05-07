@@ -8,6 +8,7 @@ from typing import Optional
 
 from server.db.database import get_db
 from server.api.auth import hash_password, get_current_user
+from server.api.audit import log_action
 
 router = APIRouter(prefix="/api/users", tags=["users"])
 
@@ -76,6 +77,7 @@ async def create_user(req: CreateUserRequest, request: Request):
     finally:
         await db.close()
 
+    await log_action(request, "创建用户", detail=f"{req.name} ({req.phone})")
     return {"id": user_id, "phone": req.phone, "name": req.name}
 
 
@@ -114,6 +116,7 @@ async def update_user(user_id: str, req: UpdateUserRequest, request: Request):
     finally:
         await db.close()
 
+    await log_action(request, "编辑用户", detail=f"user_id={user_id}")
     return {"ok": True}
 
 
@@ -128,4 +131,5 @@ async def delete_user(user_id: str, request: Request):
         await db.commit()
     finally:
         await db.close()
+    await log_action(request, "删除用户", detail=f"user_id={user_id}")
     return {"ok": True}

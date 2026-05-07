@@ -87,25 +87,26 @@ async def stop_task(node_id: str, request: Request = None):
 
 
 @router.post("/{task_id}/approve")
-async def approve_checkout(task_id: str):
+async def approve_checkout(task_id: str, request: Request = None):
     """批准结算。"""
-    # 找到拥有此任务的节点
     for node in node_manager.get_all():
         if node.current_task_id == task_id and node.online and node.ws:
             await node.ws.send_text(make_message(MSG_APPROVE_CHECKOUT, {
                 "task_id": task_id,
             }))
+            await log_action(request, "确认结算", node.node_id, f"task_id={task_id}")
             return {"ok": True}
     raise HTTPException(404, "未找到对应节点或节点离线")
 
 
 @router.post("/{task_id}/reject")
-async def reject_checkout(task_id: str):
+async def reject_checkout(task_id: str, request: Request = None):
     """拒绝结算。"""
     for node in node_manager.get_all():
         if node.current_task_id == task_id and node.online and node.ws:
             await node.ws.send_text(make_message(MSG_REJECT_CHECKOUT, {
                 "task_id": task_id,
             }))
+            await log_action(request, "拒绝结算", node.node_id, f"task_id={task_id}")
             return {"ok": True}
     raise HTTPException(404, "未找到对应节点或节点离线")
