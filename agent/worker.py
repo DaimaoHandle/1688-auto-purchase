@@ -414,12 +414,28 @@ class PurchaseWorker:
         self.runtime["page"] = page
 
     def _do_waiting_login(self):
-        """等待用户手动登录。"""
+        """打开1688首页，等待用户手动登录。"""
         self._set_waiting("等待用户在浏览器中登录 1688")
         config = self.task_data["config"]
         page = self.runtime["page"]
 
-        from src.login import is_logged_in
+        # 先打开 1688 首页
+        logger.info("正在打开 1688.com ...")
+        page.goto("https://www.1688.com", wait_until="domcontentloaded")
+        page.wait_for_timeout(3000)
+
+        from src.login import is_logged_in, is_verification_page, wait_for_verification
+
+        # 检测是否有验证码
+        if is_verification_page(page):
+            logger.warning("检测到验证码，等待手动处理...")
+            wait_for_verification(page)
+
+        if is_logged_in(page):
+            logger.info("检测到已登录状态")
+            return
+
+        logger.info("请在浏览器中手动登录 1688 账号")
         timeout_ms = config.get("timeouts", {}).get("login_wait", 120000)
         deadline = time.time() + timeout_ms / 1000
 
@@ -428,6 +444,9 @@ class PurchaseWorker:
                 return False
             if time.time() > deadline:
                 raise ManualError("登录等待超时，请检查浏览器")
+            # 检测验证码
+            if is_verification_page(page):
+                wait_for_verification(page)
             page.wait_for_timeout(2000)
 
     def _do_logged_in(self):
