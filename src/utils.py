@@ -24,19 +24,19 @@ def setup_logging(config: dict) -> logging.Logger:
     purchase_logger.propagate = False  # 不传递到 root logger，避免重复
 
     # 清除已有的非 WS handler（防止重复调用时累加）
-    from agent.log_interceptor import WSLogHandler
-    purchase_logger.handlers = [h for h in purchase_logger.handlers if isinstance(h, WSLogHandler)]
+    # 只保留 WSLogHandler，移除其他所有 handler
+    try:
+        from agent.log_interceptor import WSLogHandler
+        purchase_logger.handlers = [h for h in purchase_logger.handlers if isinstance(h, WSLogHandler)]
+    except ImportError:
+        purchase_logger.handlers = []
 
-    # 添加文件和控制台 handler
+    # 添加文件 handler（不再添加 StreamHandler，避免与 root logger 重复）
     fmt = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
 
     fh = logging.FileHandler(log_file, encoding="utf-8")
     fh.setFormatter(fmt)
     purchase_logger.addHandler(fh)
-
-    sh = logging.StreamHandler()
-    sh.setFormatter(fmt)
-    purchase_logger.addHandler(sh)
 
     return purchase_logger
 
