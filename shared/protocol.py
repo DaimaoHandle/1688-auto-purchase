@@ -20,6 +20,8 @@ MSG_START_TASK = "start_task"
 MSG_STOP_TASK = "stop_task"
 MSG_APPROVE_CHECKOUT = "approve_checkout"
 MSG_REJECT_CHECKOUT = "reject_checkout"
+MSG_PAUSE_TASK = "pause_task"
+MSG_RESUME_TASK = "resume_task"
 
 # 管理指令（Server → Agent）
 MSG_UPDATE_CODE = "update_code"
@@ -46,6 +48,7 @@ STATUS_CHECKING_OUT = "checking_out"
 STATUS_COMPLETED = "completed"
 STATUS_FAILED = "failed"
 STATUS_CANCELLED = "cancelled"
+STATUS_PAUSED = "paused"
 
 # 状态中文显示
 STATUS_LABELS = {
@@ -62,6 +65,7 @@ STATUS_LABELS = {
     STATUS_COMPLETED: "已完成",
     STATUS_FAILED: "异常",
     STATUS_CANCELLED: "已取消",
+    STATUS_PAUSED: "已暂停",
 }
 
 

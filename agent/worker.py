@@ -26,7 +26,7 @@ from shared.protocol import (
     STATUS_STARTING, STATUS_WAITING_LOGIN, STATUS_LOGGED_IN,
     STATUS_SEARCHING, STATUS_ENTERING_SHOP, STATUS_FILLING_CART,
     STATUS_CART_FILLED, STATUS_AWAITING_APPROVAL, STATUS_CHECKING_OUT,
-    STATUS_COMPLETED, STATUS_FAILED, STATUS_CANCELLED,
+    STATUS_COMPLETED, STATUS_FAILED, STATUS_CANCELLED, STATUS_PAUSED,
 )
 
 logger = logging.getLogger("1688-auto")
@@ -52,6 +52,10 @@ class ManualError(TaskError):
 class FatalError(TaskError):
     """致命错误，不可恢复（配置错误、店铺不存在等）"""
     error_type = "fatal"
+
+class TaskCancelled(Exception):
+    """任务被取消（暂停期间取消或正常取消）"""
+    pass
 
 
 # ─── 状态定义 ──────────────────────────────────────────
@@ -97,6 +101,10 @@ class PurchaseWorker:
         self._loop = loop
         self._thread = None
         self._cancel_event = threading.Event()
+        self._pause_event = threading.Event()
+        self._pause_event.set()  # 初始为非暂停状态
+        self._paused = False
+        self._pre_pause_status = None  # 暂停前的状态，恢复时还原
         self._approve_event = threading.Event()
         self._approved = False
         self._running = False
@@ -125,9 +133,18 @@ class PurchaseWorker:
             logger.warning("已有任务在运行")
             return
         self._cancel_event.clear()
+        self._pause_event.set()
+        self._paused = False
+        self._pre_pause_status = None
         self._approve_event.clear()
         self._approved = False
         self._running = True
+
+        # 注入 checkpoint 到 src 模块，使其能在操作间隙暂停
+        from src.cart import set_checkpoint as cart_set_cp
+        from src.shop import set_checkpoint as shop_set_cp
+        cart_set_cp(self.checkpoint)
+        shop_set_cp(self.checkpoint)
 
         self.task_data = {
             "task_id": task_id,
@@ -158,6 +175,7 @@ class PurchaseWorker:
     def stop_task(self):
         self._cancel_event.set()
         self._approve_event.set()
+        self._pause_event.set()  # 解除暂停阻塞，让线程能响应取消
         ctx = self.runtime.get("context")
         if ctx:
             try:
@@ -173,6 +191,44 @@ class PurchaseWorker:
     def reject_checkout(self):
         self._approved = False
         self._approve_event.set()
+
+    def pause_task(self):
+        """暂停任务：清除 pause_event，工作线程将在下一个 checkpoint 处阻塞。"""
+        if not self._running or self._paused:
+            return
+        self._paused = True
+        self._pre_pause_status = self.task_data.get("state", "")
+        self._pause_event.clear()
+        self._send_status(STATUS_PAUSED, "用户暂停")
+        logger.info("[暂停] 任务已暂停，将在下一个检查点停止")
+
+    def resume_task(self):
+        """恢复任务：设置 pause_event，工作线程从 checkpoint 处继续。"""
+        if not self._running or not self._paused:
+            return
+        self._paused = False
+        self._pause_event.set()
+        # 恢复暂停前的状态
+        if self._pre_pause_status:
+            self._send_status(self._pre_pause_status, "已恢复")
+        logger.info("[恢复] 任务已恢复执行")
+
+    def checkpoint(self):
+        """
+        细粒度检查点 — 在每个 Playwright 操作之间调用。
+        如果暂停中则阻塞，直到恢复或取消。
+        如果已取消则抛出异常。
+        """
+        if self._is_cancelled():
+            raise TaskCancelled("任务已取消")
+        if not self._pause_event.is_set():
+            logger.info("[暂停] 到达检查点，等待恢复...")
+            # 阻塞等待恢复或取消
+            while not self._pause_event.is_set():
+                if self._is_cancelled():
+                    raise TaskCancelled("任务已取消")
+                self._pause_event.wait(timeout=1.0)
+            logger.info("[恢复] 从检查点继续执行")
 
     # ─── 通信 ─────────────────────────────────────────
 
@@ -292,6 +348,9 @@ class PurchaseWorker:
                     logger.error(f"[致命错误] {sd.name}: {e}")
                     self.task_data["errors"].append({"type": "fatal", "state": sd.name, "message": str(e)})
                     raise
+                except TaskCancelled:
+                    self._transition(STATUS_CANCELLED, "用户取消")
+                    return
 
                 # handler 返回 False 表示流程终止（如用户拒绝）
                 if result is False:
@@ -301,6 +360,10 @@ class PurchaseWorker:
             td = self.task_data
             self._transition(STATUS_COMPLETED,
                 f"完成！{td['added']} 件商品，{td['orders']} 笔订单，¥{td['actual_amount']:.2f}")
+
+        except TaskCancelled:
+            if self.task_data.get("state") != STATUS_CANCELLED:
+                self._transition(STATUS_CANCELLED, "用户取消")
 
         except Exception as e:
             if self.task_data.get("state") != STATUS_CANCELLED:
@@ -363,6 +426,17 @@ class PurchaseWorker:
         self.runtime = {}
         self._clear_state()
         self._running = False
+        self._paused = False
+        self._pause_event.set()
+
+        # 清除 src 模块的 checkpoint 引用
+        try:
+            from src.cart import set_checkpoint as cart_set_cp
+            from src.shop import set_checkpoint as shop_set_cp
+            cart_set_cp(None)
+            shop_set_cp(None)
+        except Exception:
+            pass
 
     # ─── 各阶段处理方法 ────────────────────────────────
 
@@ -595,6 +669,7 @@ class PurchaseWorker:
             context, self.runtime["shop_page"], cart_cfg,
             progress_callback=self._send_progress,
             cancel_check=self._is_cancelled,
+            pause_check=self.checkpoint,
         )
 
     def _do_cart_filled(self):

@@ -11,7 +11,8 @@ from server.db.database import get_db
 from server.services.node_manager import node_manager
 from server.api.audit import log_action
 from shared.protocol import (
-    make_message, MSG_START_TASK, MSG_STOP_TASK, MSG_APPROVE_CHECKOUT, MSG_REJECT_CHECKOUT, MSG_UPDATE_CODE,
+    make_message, MSG_START_TASK, MSG_STOP_TASK, MSG_APPROVE_CHECKOUT, MSG_REJECT_CHECKOUT,
+    MSG_PAUSE_TASK, MSG_RESUME_TASK, MSG_UPDATE_CODE,
 )
 
 router = APIRouter(prefix="/api/tasks", tags=["tasks"])
@@ -82,6 +83,40 @@ async def stop_task(node_id: str, request: Request = None):
         "task_id": node.current_task_id or "",
     }))
     await log_action(request, "停止任务", node_id)
+
+    return {"ok": True}
+
+
+@router.post("/nodes/{node_id}/pause")
+async def pause_task(node_id: str, request: Request = None):
+    """向指定节点发送暂停任务指令。"""
+    node = node_manager.get(node_id)
+    if not node:
+        raise HTTPException(404, "节点不存在")
+    if not node.online or not node.ws:
+        raise HTTPException(400, "节点离线")
+
+    await node.ws.send_text(make_message(MSG_PAUSE_TASK, {
+        "task_id": node.current_task_id or "",
+    }))
+    await log_action(request, "暂停任务", node_id)
+
+    return {"ok": True}
+
+
+@router.post("/nodes/{node_id}/resume")
+async def resume_task(node_id: str, request: Request = None):
+    """向指定节点发送恢复任务指令。"""
+    node = node_manager.get(node_id)
+    if not node:
+        raise HTTPException(404, "节点不存在")
+    if not node.online or not node.ws:
+        raise HTTPException(400, "节点离线")
+
+    await node.ws.send_text(make_message(MSG_RESUME_TASK, {
+        "task_id": node.current_task_id or "",
+    }))
+    await log_action(request, "恢复任务", node_id)
 
     return {"ok": True}
 

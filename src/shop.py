@@ -5,6 +5,19 @@ from src.selector_health import try_selectors
 
 logger = logging.getLogger("1688-auto")
 
+# ─── 暂停检查点 ──────────────────────────────────────────
+_checkpoint_fn = None
+
+def set_checkpoint(fn):
+    """由 worker.py 注入检查点函数，暂停时阻塞。"""
+    global _checkpoint_fn
+    _checkpoint_fn = fn
+
+def _checkpoint():
+    """细粒度暂停检查点，在每个 Playwright 操作之间调用。"""
+    if _checkpoint_fn:
+        _checkpoint_fn()
+
 # 搜索结果中商品卡片的店铺名称选择器
 SHOP_NAME_SELECTORS = [
     ".shop-name",
@@ -200,6 +213,7 @@ def _find_shop_item(page, shop_name: str, max_loads: int = 10):
     while loads_done < max_loads:
         prev_height = page.evaluate("() => document.body.scrollHeight")
 
+        _checkpoint()  # 检查点：滚动加载前
         # 每次向下滚动固定距离
         page.evaluate(f"() => window.scrollBy(0, {scroll_step})")
 
@@ -462,6 +476,7 @@ def find_shop_and_enter(context, result_page, shop_name: str):
         raise RuntimeError(f"滚动加载多页后仍未找到店铺: {shop_name}，请查看截图确认页面内容")
 
     # 进入商品详情页（模拟真实点击，不直接跳转）
+    _checkpoint()  # 检查点：点击商品进入详情页前
     logger.info("点击商品进入详情页...")
     with context.expect_page() as detail_page_info:
         try:
@@ -524,9 +539,11 @@ def find_shop_and_enter(context, result_page, shop_name: str):
     logger.info(f"商品详情页: {detail_page.url}")
 
     # 给客服发消息
+    _checkpoint()  # 检查点：发客服消息前
     _send_message_to_service(context, detail_page)
 
     # 在详情页找到进入全店的链接
+    _checkpoint()  # 检查点：进入全店前
     logger.info("在详情页查找进入全店链接...")
     shop_page = _enter_shop_from_detail(context, detail_page)
     return shop_page

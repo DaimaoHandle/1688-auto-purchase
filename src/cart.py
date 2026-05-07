@@ -12,6 +12,19 @@ from src.retry import CircuitBreaker, is_page_alive, check_for_verification, wai
 
 logger = logging.getLogger("1688-auto")
 
+# ─── 暂停检查点 ──────────────────────────────────────────
+_checkpoint_fn = None
+
+def set_checkpoint(fn):
+    """由 worker.py 注入检查点函数，暂停时阻塞。"""
+    global _checkpoint_fn
+    _checkpoint_fn = fn
+
+def _checkpoint():
+    """细粒度暂停检查点，在每个 Playwright 操作之间调用。"""
+    if _checkpoint_fn:
+        _checkpoint_fn()
+
 # 数量"+"按钮选择器（详情页，精确匹配数量控件旁的加号）
 QUANTITY_PLUS_SELECTORS = [
     # Ant Design NumberInput（1688 2025 版）
@@ -647,6 +660,7 @@ def add_item_to_cart(context, item_el, shop_page=None, shop_name: str = "") -> f
     detail_page = None
     current_page_navigated = False  # 标记是否是当前页跳转（需要导航回去）
     try:
+        _checkpoint()  # 检查点：打开商品详情页前
         detail_page = _open_item_detail(context, item_el, shop_page)
 
         if detail_page is None:
@@ -679,10 +693,12 @@ def add_item_to_cart(context, item_el, shop_page=None, shop_name: str = "") -> f
         offer_id = extract_offer_id(detail_page.url)
 
         # 若有规格选项先选规格
+        _checkpoint()  # 检查点：选择规格前
         _select_first_sku(detail_page)
         random_delay(0.3, 0.6)
 
         # 页面默认数量为 0，必须调整为 1 才能加购
+        _checkpoint()  # 检查点：调整数量前
         if not _click_quantity_plus(detail_page):
             logger.warning("未能调整数量为1，加购可能失败")
         random_delay(0.3, 0.6)
@@ -713,6 +729,7 @@ def add_item_to_cart(context, item_el, shop_page=None, shop_name: str = "") -> f
             return 0.0
 
         # 点击"加入采购车"
+        _checkpoint()  # 检查点：点击加采购车前
         success = _click_add_to_cart(detail_page)
         if not success:
             save_screenshot(detail_page, "add_cart_btn_not_found")
@@ -890,6 +907,7 @@ def _fill_cart_from_current_page(context, shop_page, cart_config, added_count, l
         items_sorted = [item for item, _ in items_with_flag]
 
         for item_el in items_sorted:
+            _checkpoint()  # 检查点：处理下一个商品前
             if cancel_check and cancel_check():
                 return added_count, local_amount
             if added_count >= max_items:
@@ -939,6 +957,7 @@ def _fill_cart_from_current_page(context, shop_page, cart_config, added_count, l
 
             random_delay(0.5, 1.5)
 
+        _checkpoint()  # 检查点：翻页前
         logger.info(f"{prefix}第{page_num}页完毕，尝试翻页...")
         if not go_to_next_page(shop_page):
             logger.info(f"{prefix}已到最后一页")
@@ -949,7 +968,7 @@ def _fill_cart_from_current_page(context, shop_page, cart_config, added_count, l
     return added_count, local_amount
 
 
-def run_cart_filling(context, shop_page, cart_config: dict, progress_callback=None, cancel_check=None):
+def run_cart_filling(context, shop_page, cart_config: dict, progress_callback=None, cancel_check=None, pause_check=None):
     """
     主循环：遍历全店商品，逐个打开详情页加入采购车，直到达到目标金额。
 
@@ -975,6 +994,7 @@ def run_cart_filling(context, shop_page, cart_config: dict, progress_callback=No
     page_num = 1
 
     # 新品采购模式：先进新品专区采购，不足再回全部商品
+    _checkpoint()  # 检查点：开始填充前
     if purchase_mode == "new_product":
         logger.info("新品采购模式：优先采购当日上新商品")
         shop_url = shop_page.url
@@ -1023,6 +1043,7 @@ def run_cart_filling(context, shop_page, cart_config: dict, progress_callback=No
             pass
 
     # 全部商品采购前，点击销量排序（无销量商品优先）
+    _checkpoint()  # 检查点：销量排序前
     logger.info("点击销量排序，优先采购无销量商品...")
     click_sort_by_sales(shop_page)
 
@@ -1694,10 +1715,12 @@ def run_cart_checkout(context, order_limit: float = 500.0, shipping_reserve: flo
             logger.info(f"重新分组后，本次: {len(group)} 件 ¥{gtotal:.2f}")
 
         # 取消全选
+        _checkpoint()  # 检查点：取消全选前
         _uncheck_all(cart_page)
         random_delay(0.5, 1.0)
 
         # 鼠标逐个勾选本组商品
+        _checkpoint()  # 检查点：勾选商品前
         _select_group_by_mouse(cart_page, group_indices)
         random_delay(0.5, 1.0)
 
@@ -1718,6 +1741,7 @@ def run_cart_checkout(context, order_limit: float = 500.0, shipping_reserve: flo
             logger.warning("无法读取收银台金额，继续结算")
 
         # 点击结算
+        _checkpoint()  # 检查点：点击结算前
         if not _click_checkout_button(cart_page):
             logger.warning(f"订单 {i+1} 结算按钮点击失败")
             save_screenshot(cart_page, f"checkout_fail_{i+1}")
@@ -1738,6 +1762,7 @@ def run_cart_checkout(context, order_limit: float = 500.0, shipping_reserve: flo
             _confirm_popup(cart_page)
 
         # 提交订单
+        _checkpoint()  # 检查点：提交订单前
         if _click_submit_order(cart_page):
             # 检测提交结果：跳转到收银台/支付页面即为成功
             submit_ok = False

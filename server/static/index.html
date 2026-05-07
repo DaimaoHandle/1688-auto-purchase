@@ -218,6 +218,8 @@ html, body, #app { height: 100%; margin: 0; }
                                 <el-button v-if="n.online && (!n.task_status || ['idle','completed','failed','cancelled'].includes(n.task_status))" type="success" size="small" @click="startTask(n.id)">启动</el-button>
                                 <el-button v-if="n.online && n.task_status === 'awaiting_approval'" type="success" size="small" @click="approveCheckout(n.task_id)">确认结算</el-button>
                                 <el-button v-if="n.online && n.task_status === 'awaiting_approval'" type="danger" size="small" @click="rejectCheckout(n.task_id)">取消结算</el-button>
+                                <el-button v-if="n.online && n.task_status && !['idle','completed','failed','cancelled','awaiting_approval','paused'].includes(n.task_status)" type="warning" size="small" @click="pauseTask(n.id)">暂停</el-button>
+                                <el-button v-if="n.online && n.task_status === 'paused'" type="success" size="small" @click="resumeTask(n.id)">继续</el-button>
                                 <el-button v-if="n.online && n.task_status && !['idle','completed','failed','cancelled','awaiting_approval'].includes(n.task_status)" type="danger" size="small" @click="stopTask(n.id)">停止</el-button>
                                 <el-button size="small" :type="showLogs[n.id]?'primary':''" @click="toggleLog(n.id)" plain>日志</el-button>
                             </div>
@@ -261,6 +263,8 @@ html, body, #app { height: 100%; margin: 0; }
                             <el-button v-if="n.online" size="small" @click.stop="updateNodeCode(n.id)">更新</el-button>
                             <el-button v-if="n.online && (!n.task_status || ['idle','completed','failed','cancelled'].includes(n.task_status))" type="success" size="small" @click.stop="startTask(n.id)">启动</el-button>
                             <el-button v-if="n.online && n.task_status==='awaiting_approval'" type="warning" size="small" @click.stop="approveCheckout(n.task_id)">确认结算</el-button>
+                            <el-button v-if="n.online && n.task_status && !['idle','completed','failed','cancelled','awaiting_approval','paused'].includes(n.task_status)" type="warning" size="small" @click.stop="pauseTask(n.id)">暂停</el-button>
+                            <el-button v-if="n.online && n.task_status === 'paused'" type="success" size="small" @click.stop="resumeTask(n.id)">继续</el-button>
                             <el-button v-if="n.online && n.task_status && !['idle','completed','failed','cancelled','awaiting_approval'].includes(n.task_status)" type="danger" size="small" @click.stop="stopTask(n.id)">停止</el-button>
                         </div>
                     </div>
@@ -950,12 +954,13 @@ const app = createApp({
             filling_cart:'加购中', cart_filled:'加购完成',
             awaiting_approval:'等待确认结算', checking_out:'结算中',
             completed:'已完成', failed:'异常', cancelled:'已取消',
+            paused:'已暂停',
         };
 
         const pageTitle = computed(() => ({dashboard:'总览', nodes:'节点管理', tasks:'任务中心', data:'数据中心', users:'用户管理', audit:'操作日志'}[currentPage.value] || ''));
         const nodeList = computed(() => Object.values(nodes));
         const onlineCount = computed(() => nodeList.value.filter(n => n.online).length);
-        const activeCount = computed(() => nodeList.value.filter(n => n.online && n.task_status && !['idle','completed','failed','cancelled'].includes(n.task_status)).length);
+        const activeCount = computed(() => nodeList.value.filter(n => n.online && n.task_status && !['idle','completed','failed','cancelled','paused'].includes(n.task_status)).length);
 
         function statusLabel(n) {
             if (!n.online) return '离线';
@@ -964,6 +969,7 @@ const app = createApp({
         function statusType(n) {
             if (!n.online) return 'info';
             const s = n.task_status;
+            if (s === 'paused') return 'warning';
             if (s === 'awaiting_approval') return 'warning';
             if (s === 'failed') return 'danger';
             if (s === 'completed') return 'success';
@@ -1169,6 +1175,18 @@ const app = createApp({
         async function stopTask(nodeId) {
             try { await ElementPlus.ElMessageBox.confirm('确认停止？', '停止任务'); } catch { return; }
             await fetch('/api/tasks/nodes/' + nodeId + '/stop', {method:'POST'});
+        }
+        async function pauseTask(nodeId) {
+            try {
+                const res = await fetch('/api/tasks/nodes/' + nodeId + '/pause', {method:'POST'});
+                if (!res.ok) { const d = await res.json(); ElementPlus.ElMessage.error(d.detail || '暂停失败'); }
+            } catch(e) { ElementPlus.ElMessage.error(e.message); }
+        }
+        async function resumeTask(nodeId) {
+            try {
+                const res = await fetch('/api/tasks/nodes/' + nodeId + '/resume', {method:'POST'});
+                if (!res.ok) { const d = await res.json(); ElementPlus.ElMessage.error(d.detail || '恢复失败'); }
+            } catch(e) { ElementPlus.ElMessage.error(e.message); }
         }
         async function approveCheckout(taskId) { await fetch('/api/tasks/' + taskId + '/approve', {method:'POST'}); }
         async function rejectCheckout(taskId) { await fetch('/api/tasks/' + taskId + '/reject', {method:'POST'}); }
@@ -1547,7 +1565,7 @@ const app = createApp({
             taskPlans, showCreatePlan, newPlan, planNodeEnabled, planNodeConfigs,
             submitPlan, executePlan, deletePlan, togglePlanNode, planUploadImage,
             batchStartAll, batchStopAll, batchApproveAll,
-            updateAllNodes, updateNodeCode, deleteNode, startTask, stopTask, approveCheckout, rejectCheckout,
+            updateAllNodes, updateNodeCode, deleteNode, startTask, stopTask, pauseTask, resumeTask, approveCheckout, rejectCheckout,
             showConfig, configTitle, configForm, imageList, shopList,
             openConfig, saveConfig, onFileChange, onDrop, onSelectExisting,
             trendChartRef, reportSummary, reportList, reportFilter, reportLoading, loadReports, exportReports,

@@ -16,7 +16,8 @@ from agent.ws_client import AgentWSClient
 from agent.worker import PurchaseWorker
 from agent.log_interceptor import WSLogHandler
 from shared.protocol import (
-    MSG_START_TASK, MSG_STOP_TASK, MSG_APPROVE_CHECKOUT, MSG_REJECT_CHECKOUT, MSG_UPDATE_CODE,
+    MSG_START_TASK, MSG_STOP_TASK, MSG_APPROVE_CHECKOUT, MSG_REJECT_CHECKOUT,
+    MSG_PAUSE_TASK, MSG_RESUME_TASK, MSG_UPDATE_CODE,
 )
 
 # 配置日志
@@ -110,6 +111,14 @@ async def main():
                 elif msg_type == MSG_REJECT_CHECKOUT:
                     logger.info("收到拒绝结算指令")
                     worker.reject_checkout()
+
+                elif msg_type == MSG_PAUSE_TASK:
+                    logger.info("收到暂停任务指令")
+                    worker.pause_task()
+
+                elif msg_type == MSG_RESUME_TASK:
+                    logger.info("收到恢复任务指令")
+                    worker.resume_task()
 
                 elif msg_type == MSG_UPDATE_CODE:
                     logger.info("收到代码更新指令，执行 git pull...")
