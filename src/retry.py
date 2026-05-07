@@ -121,7 +121,7 @@ def check_for_verification(page) -> bool:
         return False
 
 
-def wait_for_verification_clear(page, timeout_s: int = 120):
+def wait_for_verification_clear(page, timeout_s: int = 300):
     """等待验证码被手动完成，最长等待 timeout_s 秒。"""
     logger.info(f"等待手动完成验证码（最长 {timeout_s} 秒）...")
     print(f"\n  >>> 检测到验证码，请在浏览器中手动完成验证 <<<\n")

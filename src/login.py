@@ -92,7 +92,7 @@ def is_verification_page(page) -> bool:
     return False
 
 
-def wait_for_verification(page, timeout_ms: int = 120000):
+def wait_for_verification(page, timeout_ms: int = 300000):
     """
     若当前页面为滑块 / 验证码页面，等待用户手动完成验证后继续。
     验证通过（页面离开验证页）后自动返回。
@@ -222,7 +222,7 @@ def _dump_login_debug(page):
         logger.error(f"[DEBUG] 调试信息收集失败: {e}")
 
 
-def wait_for_login(page, timeout_ms: int = 120000):
+def wait_for_login(page, timeout_ms: int = 300000):
     """打开1688首页，检测登录状态，未登录则等待用户手动登录。
     登录过程中若出现滑块 / 风控验证页面，自动暂停并等待用户手动完成验证。
     """
