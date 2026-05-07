@@ -17,6 +17,9 @@ _VERIFY_URL_KEYWORDS = [
     "punish",
     "risk.taobao",
     "sec.taobao",
+    "verify",
+    "captcha",
+    "baxia",
 ]
 
 # 页面中包含以下元素则认为是验证页面
@@ -31,20 +34,58 @@ _VERIFY_SELECTORS = [
     "[class*='verifyWrap']",
     "[class*='checkcode']",
     "[class*='captcha']",
-    "[class*='baxia']",          # 1688 安全中心
+    "[class*='baxia']",
     "[class*='punish']",
+    # 1688 新版滑块
+    "[class*='slider']",
+    "[class*='Slider']",
+    "#baxia-dialog-content",
+    "[id*='baxia']",
+    "[class*='verify-wrapper']",
+    "[class*='smc-modal']",
+    "iframe[src*='captcha']",
+    "iframe[src*='punish']",
+    "iframe[src*='verify']",
+    "iframe[src*='baxia']",
 ]
 
 
 def is_verification_page(page) -> bool:
     """检测当前页面是否为滑块验证 / 风控验证码页面。"""
     try:
+        # 1. URL 关键词检测
         url = page.url.lower()
         for kw in _VERIFY_URL_KEYWORDS:
             if kw in url:
                 return True
+
+        # 2. DOM 元素检测（选择器）
         el = try_selectors(page, _VERIFY_SELECTORS, "验证码检测", check_visible=True)
         if el:
+            return True
+
+        # 3. JS 深度检测：检查页面文字和 iframe
+        has_verify = page.evaluate("""() => {
+            // 检查页面是否有验证相关文字
+            var bodyText = document.body ? (document.body.innerText || '') : '';
+            if (bodyText.indexOf('滑块验证') !== -1 || bodyText.indexOf('请完成验证') !== -1
+                || bodyText.indexOf('拖动滑块') !== -1 || bodyText.indexOf('安全验证') !== -1
+                || bodyText.indexOf('人机验证') !== -1) {
+                return true;
+            }
+            // 检查 iframe 中是否有验证页面
+            var iframes = document.querySelectorAll('iframe');
+            for (var i = 0; i < iframes.length; i++) {
+                var src = (iframes[i].src || '').toLowerCase();
+                if (src.indexOf('captcha') !== -1 || src.indexOf('verify') !== -1
+                    || src.indexOf('baxia') !== -1 || src.indexOf('punish') !== -1
+                    || src.indexOf('slide') !== -1) {
+                    return true;
+                }
+            }
+            return false;
+        }""")
+        if has_verify:
             return True
     except Exception:
         pass

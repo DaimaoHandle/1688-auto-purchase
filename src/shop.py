@@ -509,6 +509,13 @@ def find_shop_and_enter(context, result_page, shop_name: str):
                 else:
                     raise RuntimeError("无法获取店铺名元素坐标")
         except Exception as e:
+            # 检查是否因为弹出了验证码
+            from src.login import is_verification_page, wait_for_verification
+            if is_verification_page(result_page):
+                logger.warning("检测到验证码，等待手动处理...")
+                wait_for_verification(result_page)
+                # 验证通过后重试一次
+                raise RuntimeError(f"点击商品失败（已处理验证码，请重试）: {e}")
             raise RuntimeError(f"点击商品失败: {e}")
 
     detail_page = detail_page_info.value

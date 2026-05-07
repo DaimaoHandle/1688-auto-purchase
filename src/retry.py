@@ -109,28 +109,14 @@ def is_page_alive(page) -> bool:
 def check_for_verification(page) -> bool:
     """
     检测当前页面是否弹出了验证码/滑块。
-    如果检测到，记录日志并返回 True。
+    使用 login.py 的增强检测逻辑。
     """
     try:
-        is_verify = page.evaluate("""() => {
-            var url = location.href.toLowerCase();
-            if (url.indexOf('identity') !== -1 || url.indexOf('verify') !== -1
-                || url.indexOf('captcha') !== -1 || url.indexOf('risk') !== -1) {
-                return true;
-            }
-            // 检查页面中是否有滑块验证元素
-            var sliders = document.querySelectorAll(
-                '[class*="slider"], [class*="captcha"], [class*="verify"], [id*="captcha"], [id*="slider"]'
-            );
-            for (var i = 0; i < sliders.length; i++) {
-                var r = sliders[i].getBoundingClientRect();
-                if (r.width > 50 && r.height > 20) return true;
-            }
-            return false;
-        }""")
-        if is_verify:
+        from src.login import is_verification_page
+        result = is_verification_page(page)
+        if result:
             logger.warning("[验证码] 检测到验证码/滑块，请手动完成验证")
-        return is_verify
+        return result
     except Exception:
         return False
 

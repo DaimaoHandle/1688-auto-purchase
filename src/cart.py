@@ -732,6 +732,15 @@ def add_item_to_cart(context, item_el, shop_page=None, shop_name: str = "") -> f
 
     except Exception as e:
         logger.warning(f"加入采购车失败: {e}")
+        # 检查是否因为弹出了验证码
+        try:
+            from src.login import is_verification_page, wait_for_verification
+            check_page = detail_page or shop_page
+            if check_page and is_verification_page(check_page):
+                logger.warning("检测到验证码，等待手动处理...")
+                wait_for_verification(check_page)
+        except Exception:
+            pass
         if detail_page:
             save_screenshot(detail_page, "add_cart_error")
         return 0.0
