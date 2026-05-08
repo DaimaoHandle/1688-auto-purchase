@@ -68,9 +68,10 @@ async def main():
     log_handler.setFormatter(logging.Formatter("%(message)s"))
     purchase_logger = logging.getLogger("1688-auto")
     purchase_logger.propagate = False  # 立即阻止传播到 root logger
-    # 清除已有的 WSLogHandler（防止重启后重复）
+    # 清除所有已有的 WSLogHandler，确保只有 1 个
     purchase_logger.handlers = [h for h in purchase_logger.handlers if not isinstance(h, WSLogHandler)]
     purchase_logger.addHandler(log_handler)
+    logger.info(f"1688-auto logger handlers: {len(purchase_logger.handlers)} 个 = {[type(h).__name__ for h in purchase_logger.handlers]}")
 
     # 命令处理循环
     async def command_loop():

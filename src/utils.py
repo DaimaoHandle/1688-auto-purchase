@@ -23,15 +23,18 @@ def setup_logging(config: dict) -> logging.Logger:
     purchase_logger.setLevel(level)
     purchase_logger.propagate = False  # 不传递到 root logger，避免重复
 
-    # 清除已有的非 WS handler（防止重复调用时累加）
-    # 只保留 WSLogHandler，移除其他所有 handler
+    # 清除所有 handler，只保留最多 1 个 WSLogHandler
+    ws_handler = None
     try:
         from agent.log_interceptor import WSLogHandler
-        purchase_logger.handlers = [h for h in purchase_logger.handlers if isinstance(h, WSLogHandler)]
+        for h in purchase_logger.handlers:
+            if isinstance(h, WSLogHandler) and ws_handler is None:
+                ws_handler = h  # 只保留第一个
     except ImportError:
-        purchase_logger.handlers = []
+        pass
+    purchase_logger.handlers = [ws_handler] if ws_handler else []
 
-    # 添加文件 handler（不再添加 StreamHandler，避免与 root logger 重复）
+    # 添加文件 handler
     fmt = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
 
     fh = logging.FileHandler(log_file, encoding="utf-8")
