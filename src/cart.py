@@ -1473,14 +1473,18 @@ def _select_group_by_mouse(cart_page, group_indices: list):
     用真实鼠标逐个点击勾选指定的商品。
     group_indices: 要勾选的商品索引列表（对应 _read_cart_items 返回的 index）。
     每次点击前独立定位目标 TBODY 并 scrollIntoView，确保坐标准确。
+    点击后验证是否勾选成功（不满足起批数量的商品无法勾选）。
+    返回 (成功勾选数, 失败的索引列表)。
     """
     clicked = 0
+    failed_indices = []
     for idx in group_indices:
         # 每次独立查询坐标（因为前一次点击可能导致 DOM 变化）
         cart_page.wait_for_timeout(300)
         coord = _get_one_checkbox_coord(cart_page, idx)
         if not coord:
             logger.warning(f"  商品[{idx}] 未找到 checkbox，跳过")
+            failed_indices.append(idx)
             continue
         if coord.get('checked'):
             logger.info(f"  商品[{idx}] 已勾选，跳过")
@@ -1490,11 +1494,21 @@ def _select_group_by_mouse(cart_page, group_indices: list):
         # 真实鼠标点击
         cart_page.mouse.click(coord['x'], coord['y'])
         cart_page.wait_for_timeout(2000)  # 等待服务器响应
-        clicked += 1
-        logger.info(f"  鼠标勾选商品[{idx}] ({coord['x']:.0f},{coord['y']:.0f})")
 
-    logger.info(f"已鼠标勾选 {clicked}/{len(group_indices)} 个商品")
-    return clicked
+        # 验证是否勾选成功（不满足起批数量的商品点击后仍为未勾选）
+        verify_coord = _get_one_checkbox_coord(cart_page, idx)
+        if verify_coord and verify_coord.get('checked'):
+            clicked += 1
+            logger.info(f"  鼠标勾选商品[{idx}] 成功 ({coord['x']:.0f},{coord['y']:.0f})")
+        else:
+            failed_indices.append(idx)
+            logger.warning(f"  商品[{idx}] 勾选失败（可能不满足起批数量），跳过")
+
+    if failed_indices:
+        logger.warning(f"勾选结果: 成功 {clicked}/{len(group_indices)}，失败 {len(failed_indices)} 个: {failed_indices}")
+    else:
+        logger.info(f"已鼠标勾选 {clicked}/{len(group_indices)} 个商品")
+    return clicked, failed_indices
 
 
 def _read_item_prices(cart_page) -> list:
@@ -1754,8 +1768,18 @@ def run_cart_checkout(context, order_limit: float = 500.0, shipping_reserve: flo
 
         # 鼠标逐个勾选本组商品
         _checkpoint()  # 检查点：勾选商品前
-        _select_group_by_mouse(cart_page, group_indices)
+        checked_count, failed_indices = _select_group_by_mouse(cart_page, group_indices)
         random_delay(0.5, 1.0)
+
+        # 从当前组中移除勾选失败的商品（不满足起批数量等）
+        if failed_indices:
+            group_indices = [idx for idx in group_indices if idx not in failed_indices]
+            gtotal = sum(it['price'] for it in group if it['index'] in group_indices)
+            logger.info(f"移除 {len(failed_indices)} 个无法勾选的商品，剩余 {len(group_indices)} 个 预计 ¥{gtotal:.2f}")
+
+        if not group_indices or checked_count == 0:
+            logger.warning(f"订单 {i+1} 无商品可勾选，跳过")
+            continue
 
         # 读取收银台实际金额，如果超限则调整
         real_amount = _read_bottom_bar_amount(cart_page)
