@@ -556,60 +556,80 @@ class PurchaseWorker:
                 if has_items and has_items > 0:
                     logger.info(f"采购车有 {has_items} 个残留商品，正在清空...")
 
+                    # 先滚动到页面底部，确保底部栏渲染出来
+                    cart_page.evaluate("() => window.scrollTo(0, document.body.scrollHeight)")
+                    cart_page.wait_for_timeout(2000)
+
                     # 找底部栏的全选 checkbox 并用鼠标点击
+                    select_all_ok = False
                     for attempt in range(3):
                         coord = _mouse_click_select_all(cart_page)
                         if coord:
-                            cart_page.mouse.click(coord['x'], coord['y'])
-                            cart_page.wait_for_timeout(3000)
+                            logger.info(f"找到全选按钮 ({coord['x']:.0f},{coord['y']:.0f}), checked={coord.get('checked')}")
+                            # 确保是选中状态：如果未选中就点击
+                            if not coord.get('checked'):
+                                cart_page.mouse.click(coord['x'], coord['y'])
+                                cart_page.wait_for_timeout(3000)
+                                logger.info("已点击全选")
+                            else:
+                                logger.info("全选已是选中状态")
+                            select_all_ok = True
                             break
-                        cart_page.wait_for_timeout(2000)
+                        else:
+                            logger.warning(f"第{attempt+1}次未找到全选按钮，滚动重试...")
+                            cart_page.evaluate("() => window.scrollTo(0, document.body.scrollHeight)")
+                            cart_page.wait_for_timeout(2000)
 
-                    # 找删除按钮并用鼠标点击（按钮文字可能是"删除"或"删除 N"）
-                    for attempt in range(3):
-                        del_coord = cart_page.evaluate("""() => {
-                            var all = document.querySelectorAll('button');
-                            for (var i = 0; i < all.length; i++) {
-                                var txt = String(all[i].innerText || '').trim();
-                                if (txt.indexOf('删除') !== -1 && txt.length < 10) {
-                                    var r = all[i].getBoundingClientRect();
-                                    if (r.width > 15 && r.height > 10) {
-                                        return {x: r.x + r.width/2, y: r.y + r.height/2, txt: txt};
-                                    }
-                                }
-                            }
-                            return null;
-                        }""")
-                        if del_coord:
-                            cart_page.mouse.click(del_coord['x'], del_coord['y'])
-                            cart_page.wait_for_timeout(3000)
-
-                            # 确认弹窗（按钮可能是"删除"、"确定"、"确认"）
-                            confirm_coord = cart_page.evaluate("""() => {
-                                var keywords = ['删除', '确定', '确认'];
-                                var all = document.querySelectorAll('button');
-                                for (var k = 0; k < keywords.length; k++) {
-                                    for (var i = 0; i < all.length; i++) {
-                                        var txt = String(all[i].innerText || '').trim();
-                                        if (txt === keywords[k]) {
-                                            var r = all[i].getBoundingClientRect();
-                                            if (r.width > 20 && r.height > 15) {
-                                                return {x: r.x + r.width/2, y: r.y + r.height/2};
-                                            }
+                    if not select_all_ok:
+                        logger.warning("未找到全选按钮，跳过清空")
+                    else:
+                        # 找删除按钮并用鼠标点击
+                        for attempt in range(3):
+                            del_coord = cart_page.evaluate("""() => {
+                                var all = document.querySelectorAll('button, a, div, span');
+                                for (var i = 0; i < all.length; i++) {
+                                    var txt = String(all[i].innerText || '').trim();
+                                    if (txt.indexOf('删除') !== -1 && txt.length < 10) {
+                                        var r = all[i].getBoundingClientRect();
+                                        if (r.width > 15 && r.height > 10) {
+                                            return {x: r.x + r.width/2, y: r.y + r.height/2, txt: txt};
                                         }
                                     }
                                 }
                                 return null;
                             }""")
-                            if confirm_coord:
-                                cart_page.mouse.click(confirm_coord['x'], confirm_coord['y'])
+                            if del_coord:
+                                logger.info(f"找到删除按钮: \"{del_coord['txt']}\" ({del_coord['x']:.0f},{del_coord['y']:.0f})")
+                                cart_page.mouse.click(del_coord['x'], del_coord['y'])
                                 cart_page.wait_for_timeout(3000)
 
-                            logger.info("已清空采购车残留商品")
-                            break
-                        else:
-                            logger.warning(f"第{attempt+1}次未找到删除按钮，重试...")
-                            cart_page.wait_for_timeout(2000)
+                                # 确认弹窗
+                                confirm_coord = cart_page.evaluate("""() => {
+                                    var keywords = ['删除', '确定', '确认'];
+                                    var all = document.querySelectorAll('button');
+                                    for (var k = 0; k < keywords.length; k++) {
+                                        for (var i = 0; i < all.length; i++) {
+                                            var txt = String(all[i].innerText || '').trim();
+                                            if (txt === keywords[k]) {
+                                                var r = all[i].getBoundingClientRect();
+                                                if (r.width > 20 && r.height > 15) {
+                                                    return {x: r.x + r.width/2, y: r.y + r.height/2, txt: txt};
+                                                }
+                                            }
+                                        }
+                                    }
+                                    return null;
+                                }""")
+                                if confirm_coord:
+                                    logger.info(f"点击确认: \"{confirm_coord['txt']}\"")
+                                    cart_page.mouse.click(confirm_coord['x'], confirm_coord['y'])
+                                    cart_page.wait_for_timeout(3000)
+
+                                logger.info("已清空采购车残留商品")
+                                break
+                            else:
+                                logger.warning(f"第{attempt+1}次未找到删除按钮，重试...")
+                                cart_page.wait_for_timeout(2000)
                 else:
                     logger.info("采购车为空，无需清理")
         except Exception as e:

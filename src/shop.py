@@ -660,23 +660,40 @@ def find_shop_and_enter(context, result_page, shop_name: str):
                 except Exception:
                     pass
 
-                # 用 JS 从店铺名元素往上找卡片容器中的商品图片
+                # 用 JS 先定位店铺名所属的卡片容器，再在容器内找商品图片
                 img_coord = result_page.evaluate("""(el) => {
+                    // 第一步：往上找卡片容器（宽200-600、高>150的最小祖先）
                     var node = el;
-                    for (var i = 0; i < 10; i++) {
+                    var card = null;
+                    for (var i = 0; i < 12; i++) {
                         node = node.parentElement;
                         if (!node) break;
-                        var img = node.querySelector('img');
-                        if (img) {
-                            var r = img.getBoundingClientRect();
-                            if (r.width > 50 && r.height > 50) {
-                                return {x: r.x + r.width/2, y: r.y + r.height/2};
-                            }
+                        var r = node.getBoundingClientRect();
+                        if (r.width > 200 && r.height > 150 && r.width < 600) {
+                            card = node;
+                            break;
                         }
                     }
-                    // 兜底：用店铺名上方区域
+                    // 第二步：在卡片容器内找最大的商品图片
+                    if (card) {
+                        var bestImg = null, bestArea = 0;
+                        var imgs = card.querySelectorAll('img');
+                        for (var j = 0; j < imgs.length; j++) {
+                            var ir = imgs[j].getBoundingClientRect();
+                            var area = ir.width * ir.height;
+                            if (ir.width > 80 && ir.height > 80 && area > bestArea) {
+                                bestImg = imgs[j];
+                                bestArea = area;
+                            }
+                        }
+                        if (bestImg) {
+                            var br = bestImg.getBoundingClientRect();
+                            return {x: br.x + br.width/2, y: br.y + br.height/2, src: 'card'};
+                        }
+                    }
+                    // 兜底：用店铺名上方区域（可能不准，验证会兜底）
                     var r2 = el.getBoundingClientRect();
-                    if (r2.width > 0) return {x: r2.x + r2.width/2, y: r2.y - 80};
+                    if (r2.width > 0) return {x: r2.x + r2.width/2, y: r2.y - 80, src: 'fallback'};
                     return null;
                 }""", card)
 
