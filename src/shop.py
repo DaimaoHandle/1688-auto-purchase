@@ -70,6 +70,125 @@ NEXT_PAGE_SELECTORS = [
 ]
 
 
+def _verify_detail_page_shop(detail_page, shop_name: str) -> bool:
+    """
+    在商品详情页验证店铺名是否与目标匹配。
+    详情页通常在顶部有店铺名称，通过 JS 扫描页面文字判断。
+    """
+    try:
+        found_name = detail_page.evaluate("""(targetName) => {
+            // 搜索包含店铺名文字的元素
+            const all = document.querySelectorAll('a, span, div, p');
+            for (const el of all) {
+                const txt = (el.innerText || '').trim();
+                if (txt.length < 4 || txt.length > 40) continue;
+                // 双向包含匹配
+                if (txt.indexOf(targetName) !== -1 || targetName.indexOf(txt) !== -1) {
+                    const r = el.getBoundingClientRect();
+                    if (r.width > 0 && r.height > 0) return txt;
+                }
+            }
+            return '';
+        }""", shop_name)
+        if found_name:
+            logger.info(f"详情页店铺验证通过: 「{found_name}」匹配目标「{shop_name}」")
+            return True
+        else:
+            # 再用页面全文做一次粗匹配
+            page_text = detail_page.evaluate("() => document.body.innerText || ''")
+            if shop_name in page_text:
+                logger.info(f"详情页全文包含目标店铺名「{shop_name}」")
+                return True
+            logger.warning(f"详情页未找到目标店铺名「{shop_name}」")
+            return False
+    except Exception as e:
+        logger.warning(f"验证详情页店铺名失败: {e}")
+        return True  # 验证失败时不阻塞流程
+
+
+def _retry_find_shop(context, result_page, shop_name: str):
+    """
+    详情页店铺不匹配后，回到搜索结果页继续滚动查找下一个匹配的商品。
+    最多再尝试 3 次。
+    """
+    for retry in range(3):
+        logger.info(f"重试查找目标店铺（第{retry+1}次）...")
+        # 继续滚动搜索结果页
+        result_page.evaluate("() => window.scrollBy(0, 800)")
+        result_page.wait_for_timeout(2000)
+
+        card = _find_shop_item(result_page, shop_name, max_loads=3)
+        if not card:
+            continue
+
+        _checkpoint()
+        logger.info("重试：点击商品进入详情页...")
+        try:
+            with context.expect_page() as detail_info:
+                href = card.get_attribute("href") if hasattr(card, "get_attribute") else None
+                if href and ("detail.1688.com" in href or "/offer/" in href):
+                    try:
+                        result_page.evaluate("(el) => el.scrollIntoView({block:'center'})", card)
+                        result_page.wait_for_timeout(1000)
+                    except Exception:
+                        pass
+                    card.click(timeout=5000)
+                else:
+                    try:
+                        result_page.evaluate("(el) => el.scrollIntoView({block:'center'})", card)
+                        result_page.wait_for_timeout(1000)
+                    except Exception:
+                        pass
+                    img_coord = result_page.evaluate("""(el) => {
+                        var node = el;
+                        var card = null;
+                        for (var i = 0; i < 12; i++) {
+                            node = node.parentElement;
+                            if (!node) break;
+                            var r = node.getBoundingClientRect();
+                            if (r.width > 200 && r.height > 150 && r.width < 600) { card = node; break; }
+                        }
+                        if (card) {
+                            var imgs = card.querySelectorAll('img');
+                            for (var j = 0; j < imgs.length; j++) {
+                                var r2 = imgs[j].getBoundingClientRect();
+                                if (r2.width > 80 && r2.height > 80) return {x: r2.x + r2.width/2, y: r2.y + r2.height/2};
+                            }
+                        }
+                        var r3 = el.getBoundingClientRect();
+                        if (r3.width > 0) return {x: r3.x + r3.width/2, y: r3.y - 80};
+                        return null;
+                    }""", card)
+                    if img_coord:
+                        result_page.mouse.click(img_coord['x'], img_coord['y'])
+                    else:
+                        continue
+
+            detail_page = detail_info.value
+            detail_page.wait_for_load_state("domcontentloaded")
+            detail_page.wait_for_timeout(3000)
+            logger.info(f"重试详情页: {detail_page.url}")
+
+            if _verify_detail_page_shop(detail_page, shop_name):
+                # 匹配成功，继续正常流程
+                _checkpoint()
+                _send_message_to_service(context, detail_page)
+                _checkpoint()
+                logger.info("在详情页查找进入全店链接...")
+                return _enter_shop_from_detail(context, detail_page)
+            else:
+                logger.warning(f"重试第{retry+1}次：详情页店铺仍不匹配，关闭")
+                try:
+                    detail_page.close()
+                except Exception:
+                    pass
+        except Exception as e:
+            logger.warning(f"重试点击失败: {e}")
+            continue
+
+    raise RuntimeError(f"多次尝试后仍未能进入目标店铺: {shop_name}")
+
+
 def _match_shop_name(name_text: str, shop_name: str) -> bool:
     """
     双向部分匹配：
@@ -168,7 +287,50 @@ def _scan_current_cards(page, shop_name: str):
                     logger.info(f"找到商品详情链接: {href[:80]}")
                     return link_el
 
-                # 没有 detail 链接，返回店铺名元素本身（用于点击其附近的商品图片）
+                # 没有 detail 链接，尝试用 JS 在同一卡片容器内找商品图片链接
+                # 关键：往上找到包含店铺名的最小卡片容器（通过尺寸判断），再在其中找图片链接
+                card_link = page.evaluate_handle("""el => {
+                    let node = el;
+                    let card = null;
+                    // 往上找卡片容器：宽度 > 200 且高度 > 150 的最小祖先
+                    for (let i = 0; i < 12; i++) {
+                        node = node.parentElement;
+                        if (!node) break;
+                        const r = node.getBoundingClientRect();
+                        if (r.width > 200 && r.height > 150 && r.width < 600) {
+                            card = node;
+                            break;
+                        }
+                    }
+                    if (!card) return null;
+                    // 在卡片内找可点击的商品图片（排除 logo 等小图）
+                    const imgs = card.querySelectorAll('img');
+                    for (const img of imgs) {
+                        const r = img.getBoundingClientRect();
+                        if (r.width > 80 && r.height > 80) {
+                            // 找图片的父级 <a> 链接
+                            let p = img;
+                            for (let j = 0; j < 5; j++) {
+                                p = p.parentElement;
+                                if (!p) break;
+                                if (p.tagName === 'A') {
+                                    const href = p.getAttribute('href') || '';
+                                    if (href.indexOf('similar') === -1 && href.indexOf('javascript') === -1) {
+                                        return p;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    return null;
+                }""", name_el)
+                card_link_el = card_link.as_element()
+                if card_link_el:
+                    href = card_link_el.get_attribute("href") or ""
+                    logger.info(f"在卡片容器内找到图片链接: {href[:80]}")
+                    return card_link_el
+
+                # 最终兜底：返回店铺名元素本身
                 logger.info("未找到详情链接，将点击店铺名附近区域")
                 return name_el
             except Exception as ex:
@@ -537,6 +699,16 @@ def find_shop_and_enter(context, result_page, shop_name: str):
     detail_page.wait_for_load_state("domcontentloaded")
     detail_page.wait_for_timeout(3000)
     logger.info(f"商品详情页: {detail_page.url}")
+
+    # 验证详情页的店铺名是否与目标匹配
+    if not _verify_detail_page_shop(detail_page, shop_name):
+        logger.warning(f"详情页店铺名与目标不匹配，关闭后重试")
+        try:
+            detail_page.close()
+        except Exception:
+            pass
+        # 回到搜索结果页，继续往下滚动找下一个匹配
+        return _retry_find_shop(context, result_page, shop_name)
 
     # 给客服发消息
     _checkpoint()  # 检查点：发客服消息前
